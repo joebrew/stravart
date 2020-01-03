@@ -1,0 +1,5 @@
+.httr-oauth
+credentials.yaml
+config.yml
+cache/
+logs/
