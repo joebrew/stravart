@@ -12,17 +12,6 @@ if(interactive()){
   APP_URL <- "https://servername/path-to-app"
 }
 
-# Define function for authentication (modification of strava_oauth)
-stravauth <- function (app_name, app_client_id, app_secret, app_scope = "public", 
-                       cache = FALSE, redirect_uri = oauth_callback()){
-  strava_app <- oauth_app(appname = app_name, key = app_client_id, 
-                          secret = app_secret)
-  strava_end <- oauth_endpoint(request = "https://www.strava.com/oauth/authorize?", 
-                               authorize = "https://www.strava.com/oauth/authorize", 
-                               access = "https://www.strava.com/oauth/token")
-  oauth2.0_token(endpoint = strava_end, app = strava_app, scope = app_scope, 
-                 cache = cache)
-}
 
 config_panel <- shinyjs::hidden(
   fluidRow(
@@ -181,16 +170,16 @@ server <- function(input, output, session) {
   # APPLICATION STARTUP, STATUS AND UI ----
   observe({
     
-    # 1. Manage Cache ----
-    if (cache) {
-      app_parameters$logged_in <- T
-      app_parameters$config_loaded <- T
-      app_parameters$stoken=readRDS('./cache/stoken.rds')
-      app_parameters$token_data=readRDS('./cache/token_data.rds')
-      app_parameters$activities=readRDS('./cache/activities.rds')
-      app_parameters$activities=readRDS('./cache/athlete.rds')
-      return()
-    }
+    # # 1. Manage Cache ----
+    # if (cache) {
+    #   app_parameters$logged_in <- T
+    #   app_parameters$config_loaded <- T
+    #   app_parameters$stoken=readRDS('./cache/stoken.rds')
+    #   app_parameters$token_data=readRDS('./cache/token_data.rds')
+    #   app_parameters$activities=readRDS('./cache/activities.rds')
+    #   app_parameters$activities=readRDS('./cache/athlete.rds')
+    #   return()
+    # }
     
     # 2. Load config ----
     app_parameters$config_loaded <- 
@@ -242,48 +231,95 @@ server <- function(input, output, session) {
                                                                    app_scope="activity:read",
                                                                 redirect_uri = APP_URL))
         
-        saveRDS(app_parameters$token_data,'./cache/token_data.rds')
-        saveRDS(app_parameters$stoken,'./cache/stoken.rds')
+        # Retrieve the athlete
+        my_athlete <- get_athlete(stoken = app_parameters$stoken)
         
+        # Save stuff into the cache (overwriting when necessary/able)
+        id <- my_athlete$id
+        cache_dir <- paste0('./cache/', id)
+        dir.create(cache_dir,showWarnings = FALSE)
+        
+        saveRDS(app_parameters$token_data, paste0(cache_dir, '/token_data.rds'))
+        saveRDS(app_parameters$stoken, paste0(cache_dir, '/stoken.rds'))
+
         # 3.2 Download activity list ----
         
         shiny::setProgress(value=0.2,message = 'Connecting to strava')
-        
         loginfo('Downloading activities...',logger='api')
         shiny::setProgress(value=0.25,message = 'Downloading activity list')
-        my_athlete <- get_athlete(stoken = app_parameters$stoken)
-        if(my_athlete$id %in% athletes$id){
-          message('ALREADY HAVE THIS ATHLETE. LOADING OLD DATA...')
-        }
+        
+        # Try to retrieve athlete data from database
+        app_parameters$in_db <- list()
+        ids_already_in_db <- 
+          dbGetQuery(conn = con,
+                     statement = paste0('select id from activities where activities."athlete.id" = ',
+                                        "'",
+                                        id,
+                                        "'")) %>% .$id
+        # New data
         my_acts <- get_activity_list_by_page(app_parameters$stoken,200,100)
-
-        shiny::setProgress(value=0.6,message = 'Transforming data')
-        
-        loginfo(glue('Downloaded {length(my_acts)} activities'),logger='api')
-        
-        # process
-        loginfo('Tidying activities',logger='api')
         my_acts.df <- my_acts %>% 
           tidy_activities()
+        # Remove those that are already in the database
+        new_acts <- my_acts.df %>%
+          filter(!id %in% ids_already_in_db)
+        # Add new_acts to db if there are any
+        if(nrow(new_acts) > 0){
+          # Write the new acts to the table
+          # PROBLEM IS HERE 
+          dbWriteTable(conn = con,
+                       name = activities,
+                       value = data.frame(new_acts),
+                       append = TRUE,
+                       row.names = FALSE)
+        }
+        # Retrieve the full activities for this athlete from the table
+        activities_in_db <- 
+          dbGetQuery(conn = con,
+                     statement = paste0('select * from activities where activities."athlete.id" = ',
+                                        "'",
+                                        id,
+                                        "'"))
+
+        shiny::setProgress(value=0.6,message = 'Transforming data')
+        loginfo(glue('Downloaded {length(my_acts)} activities'),logger='api')
         loginfo('Tidying complete',logger='api')
         
+        app_parameters$activities <- activities_in_db
         
-        app_parameters$activities <- my_acts.df
+        # To do, update the athlete data in the database
+        # Update the athlete in the db
+        athlete_ids_already_in_db <- 
+          dbGetQuery(conn = con,
+                     statement = paste0('select id from athletes')) %>% .$id
+        # If this athlete is already in the db, drop the athlete entry and overwrite
+        if(id %in% athlete_ids_already_in_db){
+          # Delete
+          dbSendQuery(conn = con,
+                      statement = paste0('DELETE FROM athletes WHERE id = ', id))
+          # Add new row
+          dbWriteTable(conn = con,
+                       name = 'athletes', 
+                       value = data.frame(tidy_athlete(my_athlete)),
+                       append = TRUE,
+                       row.names = FALSE)
+          
+        }
+        # Upodate the in-session data pertaining to the athlete
         app_parameters$athlete <- my_athlete
-        
         shiny::setProgress(value=1,message = 'Complete')
       },
       min = 0,
       max = 1
       )
       
-      # save to global parameters
-      saveRDS(my_acts,'./cache/raw_activities.rds')  
-      saveRDS(my_acts.df,'./cache/activities.rds')  
-      saveRDS(my_athlete,'./cache/athlete.rds')  
-      
-      # cache
-      dir.create('cache',showWarnings = F)
+      # # save to global parameters
+      # saveRDS(my_acts,'./cache/raw_activities.rds')  
+      # saveRDS(my_acts.df,'./cache/activities.rds')  
+      # saveRDS(my_athlete,'./cache/athlete.rds')  
+      # 
+      # # cache
+      # dir.create('cache',showWarnings = F)
     }
 
     # show config panel

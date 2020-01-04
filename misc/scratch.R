@@ -67,6 +67,13 @@ activities <- dbReadTable(conn = con,name = 'activities')
 starting_locations <- dbReadTable(conn = con,name = 'starting_locations')
 dbDisconnect(conn = con)
 
+# Filter just for sergi vila
+this_id <- "2958750"
+activities <- activities %>% dplyr::filter(athlete.id == this_id)
+streams <- streams %>% dplyr::filter(id %in% activities$id)
+
+
+
 # Join activities to the starting locations
 activities <- left_join(x = activities,
                         y = starting_locations,
@@ -91,9 +98,12 @@ all_lines <- bind_rows(out)
 # Plot everything into one faceted chart
 
 
+
+
 # Make a plot, faceted by starting locations
 dir.create('~/Desktop/cities')
-cities <- sort(unique(all_lines$city[all_lines$type == 'Run']))
+# cities <- sort(unique(all_lines$city[all_lines$type == 'Run']))
+cities <- sort(unique(activities$location_city))
 for(i in 1:length(cities)){
   col <- sample(rainbow(100), 1)
   this_city <- cities[i]
@@ -187,7 +197,7 @@ if (scales == "fixed") {
 # Create plot
 p <- ggplot2::ggplot() +
   ggplot2::geom_path(ggplot2::aes(lon, lat, group = id), data, size = 0.35, lineend = "round") +
-  ggplot2::facet_wrap(~id, scales = scales) +
+  ggplot2::facet_wrap(~id, scales = scales, ncol = 8) +
   ggplot2::theme_void() +
   ggplot2::theme(panel.spacing = ggplot2::unit(0, "lines"),
                  strip.background = ggplot2::element_blank(),
@@ -207,9 +217,11 @@ if(labels) {
 
 # Return plot
 p
-ggsave('~/Desktop/facets.pdf', height = 4, width = 7)
+ggsave('~/Desktop/facets.png', height = 7, width = 4)
+ggsave('~/Desktop/facets2.pdf', height = 11, width = 8)
 
 # Black background facets
+streams <- x %>% filter(lastname %in% c('Hunkler', 'Bala'))
 pd = streams %>% 
   dplyr::mutate(lon = lng) %>%
   left_join(activities %>% dplyr::select(id, start_date_local, type)) #%>%
@@ -303,10 +315,10 @@ ggsave('~/Desktop/facetsdark.png', height = 4, width = 7)
 pd <- streams %>%
   left_join(activities %>% dplyr::select(total_distance = distance,
                                          id)) %>%
-  mutate(p = distance / total_distance) %>%
-  group_by(id) %>%
-  mutate(max_e = max(altitude)) %>%
-  filter(max_e < 3500)
+  mutate(p = distance / total_distance) #%>%
+  # group_by(id) %>%
+  # mutate(max_e = max(altitude)) %>%
+  # filter(max_e < 3500)
 g <- ggplot(data = pd,
        aes(x = p,
            y = altitude,
@@ -500,14 +512,14 @@ plot_elevations <- function(data, scale_free_y = F, nr  = NULL) {
                    strip.background = ggplot2::element_blank(),
                    strip.text = ggplot2::element_blank(),
                    plot.margin = ggplot2::unit(rep(1, 4), "cm")) +
-    theme(legend.position = 'none') +
-    theme(axis.text.y = element_text(size = 3)) +
-    geom_hline(yintercept = seq(0, 3000, 1000), lty = 2, lwd = 0.1, alpha = 0.2) +
-    geom_hline(yintercept = 0, col = 'grey', alpha = 0.4)
+    theme(legend.position = 'none')# +
+    # theme(axis.text.y = element_text(size = 3)) +
+    # geom_hline(yintercept = seq(0, 3000, 1000), lty = 2, lwd = 0.1, alpha = 0.2) +
+    # geom_hline(yintercept = 0, col = 'grey', alpha = 0.4)
   p
 }
 
-g <- plot_elevations(data = pd, nr = 7)
+g <- plot_elevations(data = pd, scale_free_y = T, nr = 7)
 # g
 ggsave(filename = '~/Desktop/elevations.pdf', plot = g, width = 7.5, height = 4.5)
 # Packed circles
@@ -627,3 +639,10 @@ send.mail(from = sender,
                       passwd = pass, ssl = TRUE),
           authenticate = TRUE,
           send = TRUE)
+
+
+pd <- x %>% filter(lastname %in% c('Hunkler', 'Bala')) %>%
+  left_join(starting_locations)
+
+ggplot(data = pd,
+       aes(x = ))

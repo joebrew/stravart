@@ -241,3 +241,53 @@ get_activity_list_by_page <- function(stoken,per_page=200,pages=1) {
 }
 
 
+# Function for cleaning up athlete
+tidy_athlete <- function(ath){
+  cols <- c('id', 'username', 'firstname', 'lastname',
+            'city', 'state', 'country', 'sex')
+  for(i in 1:length(cols)){
+    this_col <- cols[i]
+    this_obj <- ath[[this_col]]
+    if(is.null(this_obj)){
+      ath[[this_col]] <- NA
+    }
+  }
+  
+  out <- tibble(id = ath$id,
+                username = ath$username,
+                firstname = ath$firstname,
+                lastname = ath$lastname,
+                city = ath$city,
+                state = ath$state,
+                country = ath$country,
+                sex = ath$sex)
+  return(out)
+}
+
+# Function for extracting starting locations
+extract_starting_locations <- function(activities){
+  activities %>% dplyr::distinct(start_latlng1, start_latlng2) %>%
+    dplyr::rename(start_latitude = start_latlng1,
+                  start_longitude = start_latlng2) %>%
+    filter(!is.na(start_longitude),
+           !is.na(start_latitude)) %>%
+    mutate(starting_location_id = paste0(
+      start_longitude, ',',
+      start_latitude
+    ))
+}
+
+# Define function for authentication (modification of strava_oauth)
+stravauth <- function (app_name, app_client_id, app_secret, app_scope = "public", 
+                       cache = FALSE, redirect_uri = oauth_callback()){
+  strava_app <- oauth_app(appname = app_name, key = app_client_id, 
+                          secret = app_secret)
+  strava_end <- oauth_endpoint(request = "https://www.strava.com/oauth/authorize?", 
+                               authorize = "https://www.strava.com/oauth/authorize", 
+                               access = "https://www.strava.com/oauth/token")
+  oauth2.0_token(endpoint = strava_end, app = strava_app, scope = app_scope, 
+                 cache = cache)
+}
+
+
+

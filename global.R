@@ -39,17 +39,16 @@ addHandler(writeToFile,file=glue('./logs/{strftime(Sys.time(),\'%Y%m%d-%H%M%S\')
 loginfo('Load file depencencies',logger='authentication')
 source('./utils.R')
 source("./dplyr_verbs.R")
-list.files('./modules/',recursive = T,full.names = T,pattern='\\.R$') %>% 
-  walk(source)
+
 
 # Application options ----
 
-dir.create('cache',showWarnings = F)
-cache <- F # whether to load cached data (must have authenticated before)
-
-if (cache) {
-  loginfo('Use cached credentials and data',logger='authentication')
-}
+# dir.create('cache',showWarnings = F)
+# cache <- F # whether to load cached data (must have authenticated before)
+# 
+# if (cache) {
+#   loginfo('Use cached credentials and data',logger='authentication')
+# }
 
 # app misc ----
 periods <- list(
@@ -64,18 +63,6 @@ periods <- list(
   'Custom' = c(floor_date(Sys.Date()-1,unit = 'week')+1,as.Date(strftime(Sys.Date(),'%Y-%m-%d')))
 )
 
-# Function for cleaning up athlete
-tidy_athlete <- function(ath){
-  out <- tibble(id = ath$id,
-                username = ath$username,
-                firstname = ath$firstname,
-                lastname = ath$lastname,
-                city = ath$city,
-                state = ath$state,
-                country = ath$country,
-                sex = ath$sex)
-  return(out)
-}
 
 # Connect to the database
 creds <- yaml.load_file('credentials.yaml')
