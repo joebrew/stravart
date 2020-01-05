@@ -24,6 +24,10 @@ require(RPostgreSQL)
 require(readr)
 require(DBI)
 library(yaml)
+library(googlePolylines)
+library(gridExtra)
+library(revgeo)
+library(leaflet)
 
 # Get creds
 creds <- yaml.load_file('credentials.yaml')
@@ -72,8 +76,5 @@ pg = DBI::dbDriver("PostgreSQL")
 con = DBI::dbConnect(pg, dbname="stravart")
 message('-Connected to the stravart database')
 
-# Read in the tables from the db
-activities <- dbReadTable(conn  = con, name = 'activities')
-starting_locations <- dbReadTable(conn  = con, name = 'starting_locations')
-athletes <- dbReadTable(conn  = con, name = 'athletes')
-
+# Already geocoded starting locations
+old_starting_locations <- dbReadTable(conn = con,name = 'starting_locations')

@@ -5,7 +5,6 @@ require(readr)
 require(DBI)
 library(yaml)
 source('../global.R', chdir = T)
-library(revgeo)
 
 # Get creds
 creds <- yaml.load_file('../credentials.yaml')
@@ -25,7 +24,7 @@ my_athlete <- get_athlete(stoken = stoken)
 my_athlete$lastname
 id <- my_athlete$id
 
-dir.create(paste0('../cache/', id))
+dir.create(paste0('../cache/', id), showWarnings = FALSE)
 saveRDS(stoken, file = paste0('../cache/', id, '/stoken.rds'))
 
 # Connect to the db
@@ -39,7 +38,7 @@ old_activities <- dbReadTable(conn = con, name = 'activities')
 old_streams <- dbReadTable(conn = con, name = 'streams')
 
 # Get athlete
-my_athlete <- get_athlete(stoken = stoken)
+# my_athlete <- get_athlete(stoken = stoken)
 athlete <- tidy_athlete(my_athlete)
 message('Adding athlete to the database')
 add_athletes <- athlete %>% dplyr::filter(!id %in% old_athletes$id)
@@ -86,15 +85,17 @@ dbWriteTable(con, "streams", data.frame(add_streams), append = TRUE, row.names =
 # register_google(key = Sys.getenv('google_key'))
 
 old_starting_locations <- dbReadTable(conn = con,name = 'starting_locations')
-old_starting_locations$starting_location_id <-
-  paste0(old_starting_locations$start_longitude,',',
-         old_starting_locations$start_latitude)
+# old_starting_locations$starting_location_id <-
+#   paste0(old_starting_locations$start_longitude,',',
+#          old_starting_locations$start_latitude)
 
 # Get the new starting locations
-starting_locations <- extract_starting_locations(activities)
-
-need_to_geocode <- !starting_locations$starting_location_id %in% old_starting_locations$starting_location_id
-starting_locations <- starting_locations[need_to_geocode,]
+starting_locations <- generate_starting_location_id(activities)
+starting_locations <- unique(sort(starting_locations))
+starting_locations <- starting_locations[!is.na(starting_locations)]
+need_to_geocode <- !starting_locations %in% old_starting_locations$starting_location_id
+starting_locations <- starting_locations[need_to_geocode]
+starting_locations <- data.frame(starting_location_id = starting_locations)
 if(nrow(starting_locations) > 0){
   starting_locations$city <- starting_locations$zip <- starting_locations$state <- starting_locations$country <- as.character(NA)
   # Doing in a loop, even though not necessary, so as to save in case of failure

@@ -1,6 +1,6 @@
 library(shiny)
-
 source('global.R')
+source('plot_functions.R')
 
 if(interactive()){
   message('Interactive/testing mode')
@@ -60,17 +60,16 @@ config_panel <- shinyjs::hidden(
 
 loggin_panel <- shinyjs::hidden(
   
-  fluidRow(
-    id='loggin_panel',
+  fluidRow(id='loggin_panel',
+    
     box(
-      width=12,
+      width=6,
       status = 'primary',
-      title = 'Click to login with Strava',
+      title = 'You are not logged in. Click below.',
       solidHeader = T,
-      div(
-        uiOutput('auth_submit_button')
-        
-      )
+      column(12, align = 'center',
+             uiOutput('auth_submit_button')
+             )
     )
   )
 )
@@ -100,59 +99,103 @@ ui_activity_filters <- div(
   #   multiple = T
   # ),
   div(
-    img(src='1.2 strava api logos/powered by Strava/pwrdBy_strava_light/api_logo_pwrdBy_strava_stack_light.png',width=199*.6,height=86*.6),
+    img(src='1.2 strava api logos/compatible with strava/cptblWith_strava_white/api_logo_cptblWith_strava_stack_white.png',width=199*.6,height=86*.6),
     style='display: block;margin-left: auto;margin-right: auto;width: 50%;'
   )
 )
 
-ui_footer <- fluidRow(
-  box(
-    width=12,
-    column(4,img(src='api_logo_pwrdBy_strava_stack_light.png',width=199*.6,height=86*.6)),
-    column(8,textOutput('welcome_line'))
-  )
-)
+# ui_footer <- fluidRow(
+#   box(
+#     width=12,
+#     column(4,img(src='api_logo_pwrdBy_strava_stack_light.png',width=199*.6,height=86*.6)),
+#     column(8,textOutput('welcome_line'))
+#   )
+# )
+ui_footer <- img(src='api_logo_pwrdBy_strava_stack_light.png',width=199*.6,height=86*.6)
 
 # ui_summary_chart <- plotOutput('summary_chart')
 
-ui <- shinyUI(
+
+# Define header
+dbHeader <- dashboardHeader(
+  title = 'GPSart'
+  #titleWidth = 350
+)
+
+ui <- tagList(
   dashboardPage(
     title = 'GPSart',
     
     # HEADER ----
-    dashboardHeader(
-      title = 'GPSart'
-      #titleWidth = 350
-    ),
+    dbHeader,
     
     # SIDEBAR ----
     dashboardSidebar(
-      uiOutput('ui_logged_in')#,
+      uiOutput('ui_logged_in'),
+      # loggin_panel,
+      # ui_footer,
       # ui_activity_filters
-      #width = 350
+      width = 350
     ),
     
     
     dashboardBody(
+      tags$head(
+        tags$link(rel = "stylesheet", type = "text/css", href = "custom.css")
+      ),
       useShinyjs(),
       config_panel,
       loggin_panel,
       tabBox(
         width = 12,
         tabPanel(
-          'Example',
-          fluidPage(h3('Under construction'))
-          # summaryDataUI('summary_data')
+          'Tiny Maps',
+          fluidPage(
+            plotOutput('tiny_maps',
+                       width = '100%',
+                       height = '600px')
+          )
         ),
         tabPanel(
-          'Detailed visualizations',
-          fluidPage(h3('Under construction'))
-          # activityMapUI('map')
+          'Location maps',
+          fluidPage(
+            plotOutput('location_maps',
+                       width = '100%',
+                       height = '600px')
+          )
+        ),
+        tabPanel(
+          'Interactive map',
+          fluidPage(
+            leafletOutput('interactive_map')
+          )
+        ),
+        tabPanel(
+          'Custom map',
+          fluidPage()
+        ),
+        tabPanel(
+          'Data checker',
+          fluidPage(
+            column(6, DT::dataTableOutput('table1')),
+            column(6, DT::dataTableOutput('table2'))
+            
+          )
+          # summaryDataUI('summary_data')
         )
         
       )
     )
-  )
+  ),
+  tags$footer(ui_footer, align = "center", style = "
+              position:absolute;
+              bottom:0;
+              /*width:350px;
+              height:86px; */
+              color: white;
+              padding: 10px;
+              background-color: #1c2529;
+              z-index: 1000;")
 )
 
 server <- function(input, output, session) {
@@ -228,7 +271,7 @@ server <- function(input, output, session) {
         app_parameters$stoken <- httr::config(token = stravauth(app_name = 'GPSart', 
                                                                    app_client_id = 19335, 
                                                                    app_secret = creds$app_secret, 
-                                                                   app_scope="activity:read",
+                                                                   app_scope="activity:read_all",
                                                                 redirect_uri = APP_URL))
         
         # Retrieve the athlete
@@ -236,6 +279,9 @@ server <- function(input, output, session) {
         
         # Save stuff into the cache (overwriting when necessary/able)
         id <- my_athlete$id
+        message('ATHLETE IS: ', my_athlete$username, ': ', my_athlete$firstname, ' ', my_athlete$lastname,
+                ' (id: ', id, ')')
+        
         cache_dir <- paste0('./cache/', id)
         dir.create(cache_dir,showWarnings = FALSE)
         
@@ -243,21 +289,34 @@ server <- function(input, output, session) {
         saveRDS(app_parameters$stoken, paste0(cache_dir, '/stoken.rds'))
 
         # 3.2 Download activity list ----
-        
         shiny::setProgress(value=0.2,message = 'Connecting to strava')
         loginfo('Downloading activities...',logger='api')
         shiny::setProgress(value=0.25,message = 'Downloading activity list')
         
-        # Try to retrieve athlete data from database
-        app_parameters$in_db <- list()
+        # Try to retrieve activity/athlete data from database
         ids_already_in_db <- 
           dbGetQuery(conn = con,
                      statement = paste0('select id from activities where activities."athlete.id" = ',
                                         "'",
                                         id,
                                         "'")) %>% .$id
+        athlete_ids_already_in_db <- 
+          dbGetQuery(conn = con,
+                     statement = paste0('select id from athletes')) %>% .$id
+        activities_column_names <- 
+          names(dbGetQuery(conn = con,
+                     statement = paste0('select * from activities limit 1'))[0,])
         # New data
-        my_acts <- get_activity_list_by_page(app_parameters$stoken,200,100)
+        # Get fewer activities if the id is already in the db
+        # (this is just for the sake of speed, and should be improved at some point so as to ensure we're not over/under-fetching)
+        if(id %in% athlete_ids_already_in_db){
+          message('ATHLETE ALREADY IN DB')
+          my_acts <- get_activity_list_by_page(app_parameters$stoken,30,1)
+        } else {
+          message('NEW ATHLETE')
+          my_acts <- get_activity_list_by_page(app_parameters$stoken,200,100)
+        }
+        
         my_acts.df <- my_acts %>% 
           tidy_activities()
         # Remove those that are already in the database
@@ -265,13 +324,18 @@ server <- function(input, output, session) {
           filter(!id %in% ids_already_in_db)
         # Add new_acts to db if there are any
         if(nrow(new_acts) > 0){
+          # Remove excess columns
+          new_acts <- data.frame(new_acts)
+          new_acts <- new_acts[,names(new_acts) %in%activities_column_names]
+          message('---Writing ', nrow(new_acts), ' new activities to the database for athlete ', id)
           # Write the new acts to the table
-          # PROBLEM IS HERE 
           dbWriteTable(conn = con,
-                       name = activities,
-                       value = data.frame(new_acts),
+                       name = 'activities',
+                       value = new_acts,
                        append = TRUE,
                        row.names = FALSE)
+        } else {
+          message('---No new activities for athlete ', id)
         }
         # Retrieve the full activities for this athlete from the table
         activities_in_db <- 
@@ -285,13 +349,7 @@ server <- function(input, output, session) {
         loginfo(glue('Downloaded {length(my_acts)} activities'),logger='api')
         loginfo('Tidying complete',logger='api')
         
-        app_parameters$activities <- activities_in_db
-        
-        # To do, update the athlete data in the database
         # Update the athlete in the db
-        athlete_ids_already_in_db <- 
-          dbGetQuery(conn = con,
-                     statement = paste0('select id from athletes')) %>% .$id
         # If this athlete is already in the db, drop the athlete entry and overwrite
         if(id %in% athlete_ids_already_in_db){
           # Delete
@@ -307,11 +365,39 @@ server <- function(input, output, session) {
         }
         # Upodate the in-session data pertaining to the athlete
         app_parameters$athlete <- my_athlete
+        app_parameters$activities <- activities_in_db
         shiny::setProgress(value=1,message = 'Complete')
       },
       min = 0,
       max = 1
       )
+      
+      withProgress({
+        shiny::setProgress(value=0.1,message = 'Extracting starting locations for reverse geocoding')
+        # Get starting location ids
+        slids <- generate_starting_location_id(activities_in_db)
+        slids <- slids[!is.na(slids)]
+        slids <- sort(unique(slids))
+        # Get already geocoded starting locations
+        old_starting_locations <- dbReadTable(conn = con,name = 'starting_locations')
+        # Remove those slids which are already geocoded
+        slids <- slids[!slids %in% old_starting_locations$starting_location_id]
+        shiny::setProgress(value=0.6,message = 'Reverse geocoding activity starting locations')
+        if(length(slids) > 0){
+          # Geocode them
+          geocoded_slids <- reverse_geocode(slids = slids)
+          # Add the geocoded slids to the db
+          message('Adding starting_locations to the database')
+          dbWriteTable(con, "starting_locations", data.frame(geocoded_slids), append = TRUE, row.names = FALSE)
+        }
+        shiny::setProgress(value=1,message = 'Complete')
+      },
+      min = 0,
+      max = 1)
+      
+      # Get starting locations
+      app_parameters$starting_locations <- dbReadTable(conn = con, 
+                                                       name = 'starting_locations')
       
       # # save to global parameters
       # saveRDS(my_acts,'./cache/raw_activities.rds')  
@@ -505,12 +591,106 @@ server <- function(input, output, session) {
       )
     } else {
       fluidPage(
-        p('You are not logged in. Click the "Connect with Strava" button.')
+        # p('You are not logged in. Click the "Connect with Strava" button.')
       )
     }
   })
   
+  output$table1 <- DT::renderDataTable({
+    athl <- app_parameters$athlete
+    if(!is.null(athl)){
+      message('athl is not null')
+      out <- tidy_athlete(athl)
+    } else {
+      message('athl remains null')
+      out <- NULL
+    }
+    out
+  })
+  output$table2 <- DT::renderDataTable({
+    acts <- app_parameters$activities
+    if(!is.null(acts)){
+      message('acts is not null')
+      out <- acts
+    } else {
+      message('acts remains null')
+      out <- NULL
+    }
+    out
+  })
+
+  output$tiny_maps <- renderPlot({
+    
+    if(exists('app_parameters')){
+      pd <- app_parameters$activities
+      progress <- Progress$new(session, min=1, max=5)
+      on.exit(progress$close())
+      
+      progress$set(message = 'Map creation in progress',
+                   detail = 'This may take a minute or so...')
+    } else {
+      pd <- NULL
+      out <- NULL
+    }
+    if(is.null(pd)){
+      out <- ggplot() +
+        labs(title = 'Waiting on data from Strava')
+    } else {
+      progress$set(value = 4)
+      out <- make_tiny_maps(pd)
+      progress$set(value = 5)
+    }
+    out
+  })
+  
+  output$location_maps <- renderPlot({
+    progress <- Progress$new(session, min=1, max=5)
+    on.exit(progress$close())
+    
+    progress$set(message = 'Map creation in progress',
+                 detail = 'This may take a minute or so...')
+    progress$set(value = 1)
+    out <- NULL
+    activities <- app_parameters$activities
+    starting_locations <- app_parameters$starting_locations
+    progress$set(value = 3)
+    save(activities, starting_locations, file = 'temp.RData')
+    if(!is.null(activities) &
+       !is.null(starting_locations)){
+      progress$set(value = 4)
+      out <- make_location_maps(activities = activities,
+                                starting_locations = starting_locations)
+      progress$set(value = 5)
+    }
+    return(out)
+  })
+  
+  output$interactive_map <- renderLeaflet({
+    
+    if(exists('app_parameters')){
+      pd <- app_parameters$activities
+      progress <- Progress$new(session, min=1, max=5)
+      on.exit(progress$close())
+      
+      progress$set(message = 'Map creation in progress',
+                   detail = 'This may take a minute or so...')
+    } else {
+      pd <- NULL
+      out <- NULL
+    }
+    if(is.null(pd)){
+      out <- NULL
+    } else {
+      progress$set(value = 4)
+      out <- make_interactive_map(pd)
+      progress$set(value = 5)
+    }
+    out
+  })
+  
 }
+
+
 
 onStop(function() {
   dbDisconnect(con)
