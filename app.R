@@ -654,7 +654,6 @@ server <- function(input, output, session) {
     activities <- app_parameters$activities
     starting_locations <- app_parameters$starting_locations
     progress$set(value = 3)
-    save(activities, starting_locations, file = 'temp.RData')
     if(!is.null(activities) &
        !is.null(starting_locations)){
       progress$set(value = 4)
