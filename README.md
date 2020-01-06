@@ -63,3 +63,65 @@ pg_dump stravart > ~/Desktop/stravart.sql
 ```
 psql -f stravart.sql --host stravart-instance.cfejspjhdciw.us-east-2.rds.amazonaws.com --port 5432 --username joebrew --dbname stravart
 ```
+# To deploy to shiny server
+
+- SSH into the server
+- Install the relevant packages if not already installed
+
+sudo apt-get install libxml2-dev
+sudo su - -c "R -e \"install.packages('leaflet.extras')\""
+sudo su - -c "R -e \"install.packages('shinydashboard')\""
+sudo su - -c "R -e \"install.packages('jqr')\""
+sudo su - -c "R -e \"install.packages('sp')\""
+sudo su - -c "R -e \"install.packages('rStrava')\""
+sudo su - -c "R -e \"install.packages('tidyverse')\""
+sudo su - -c "R -e \"install.packages('lubridate')\""
+sudo su - -c "R -e \"install.packages('httr')\""
+sudo su - -c "R -e \"install.packages('jsonlite')\""
+sudo su - -c "R -e \"install.packages('glue')\""
+sudo su - -c "R -e \"install.packages('DT')\""
+sudo su - -c "R -e \"install.packages('leaflet')\""
+sudo su - -c "R -e \"install.packages('highcharter')\""
+sudo su - -c "R -e \"install.packages('shinyjs')\""
+sudo su - -c "R -e \"install.packages('shinydashboard')\""
+sudo su - -c "R -e \"install.packages('shinythemes')\""
+sudo su - -c "R -e \"install.packages('logging')\""
+sudo su - -c "R -e \"install.packages('googlePolylines')\""
+sudo su - -c "R -e \"install.packages('tidyquant')\""
+sudo su - -c "R -e \"install.packages('yaml')\""
+sudo su - -c "R -e \"install.packages('dplyr')\""
+sudo su - -c "R -e \"install.packages('RPostgreSQL')\""
+sudo su - -c "R -e \"install.packages('readr')\""
+sudo su - -c "R -e \"install.packages('DBI')\""
+sudo su - -c "R -e \"install.packages('gridExtra')\""
+sudo su - -c "R -e \"install.packages('revgeo')\""
+sudo su - -c "R -e \"devtools::install_github('fawda123/rStrava', dependencies = TRUE, force = TRUE)\""
+
+
+
+sudo systemctl restart shiny-server
+
+- Make sure that the server is receiving on port 80 (default http)
+- Edit the following file to do so: `/etc/shiny-server/shiny-server.conf`
+- Change the `listen 3838;` to `listen 80;`
+- Restart: `sudo service shiny-server restart`
+
+### On local machine
+
+- Transfer the local app stuff to the remote machine:
+```
+scp -r -i "/home/joebrew/.ssh/openhdskey.pem" /home/joebrew/Documents/stravart ubuntu@bohemia.team:/home/ubuntu/Documents
+```
+
+### On remote machine
+
+- Move things around and grant permissions:
+
+```
+sudo cp -r /home/ubuntu/Documents/stravart /srv/shiny-server/stravart
+
+cd /srv/shiny-server
+sudo chmod -R 777 stravart/
+
+sudo systemctl restart shiny-server
+```

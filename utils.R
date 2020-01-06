@@ -25,17 +25,46 @@ load_application_config <- function() {
   
 }
 
+# parse_application_url <- function(session) {
+#   
+#   paste0(session$clientData$url_protocol,
+#          "//",
+#          session$clientData$url_hostname, 
+#          ifelse(
+#            session$clientData$url_hostname == "127.0.0.1", 
+#            ":",
+#            session$clientData$url_pathname
+#          ),
+#          session$clientData$url_port
+#   )
+# }
+
 parse_application_url <- function(session) {
-  paste0(session$clientData$url_protocol,
-                    "//",
-                    session$clientData$url_hostname, 
-                    ifelse(
-                      session$clientData$url_hostname == "127.0.0.1", 
-                      ":",
-                      session$clientData$url_pathname
-                    ),
-                    session$clientData$url_port
-  )
+  local_mode <- session$clientData$url_hostname == "127.0.0.1"
+  message('url_protocol= ', session$clientData$url_protocol)
+  message('url_hostname= ', session$clientData$url_hostname)
+  message('url_pathname= ', session$clientData$url_pathname)
+  message('url_port= ', session$clientData$url_port)
+  url_protocol <- session$clientData$url_protocol
+  url_hostname <- session$clientData$url_hostname
+  url_port <- session$clientData$url_port
+  url_pathname <- session$clientData$url_pathname
+  if(local_mode){
+    paste0(url_protocol,
+           "//",
+           url_hostname, 
+           ":",
+           url_port
+    )
+  } else {
+      paste0(url_protocol,
+             "//",
+             url_hostname,
+             ":",
+             url_port,
+             # '/',
+             url_pathname)
+  }
 }
 
 logerror_stop <- function(msg,logger) {
@@ -47,13 +76,13 @@ validate_credentials <- function(authorisation_code) {
   if (nchar(Sys.getenv('strava_app_client_id')) == 0) logerror_stop('strava_app_client_id is blank',logger='authentication')
   if (nchar(Sys.getenv('strava_app_secret')) == 0) logerror_stop('strava_app_secret is blank',logger='authentication')
   
-  loginfo(glue('Using client id: {Sys.getenv(\'strava_app_client_id\')}'),
-          logger = 'authentication')
-  loginfo(glue('Using secret: {Sys.getenv(\'strava_app_secret\')}'),
-          logger =
-            'authentication')
-  loginfo(glue('Using auth code: {authorisation_code}'),
-          logger = 'authentication')
+  # loginfo(glue('Using client id: {Sys.getenv(\'strava_app_client_id\')}'),
+  #         logger = 'authentication')
+  # loginfo(glue('Using secret: {Sys.getenv(\'strava_app_secret\')}'),
+  #         logger =
+  #           'authentication')
+  # loginfo(glue('Using auth code: {authorisation_code}'),
+  #         logger = 'authentication')
 }
 
 post_authorisation_code <- function(
@@ -61,7 +90,7 @@ post_authorisation_code <- function(
   strava_app_client_id,
   strava_app_secret
 ) {
-    
+  
   # post authorisation code
   response <- POST(url = 'https://www.strava.com/oauth/token',
                    body = list(
@@ -105,7 +134,7 @@ tidy_activities <- function(.data) {
     mutate(month_end=as.Date(ceiling_date(start_date %>% as.Date,'month')-1)) %>% 
     mutate(week_start=as.Date(floor_date(start_date %>% as.Date,unit='week',week_start = 1))+1) %>% 
     mutate(month_start=start_date %>% as.Date %>% floor_date(unit = 'month') %>% as.Date())
-    
+  
   
   # create title: date + name combination
   .data <- .data %>% 
@@ -126,12 +155,12 @@ tidy_activities <- function(.data) {
   #                NA
   #              }
   #            })
-    # )
+  # )
   
   # make numeric
   if('average_heartrate' %in% names(.data))
     .data <- .data %>% 
-      mutate_at(vars(average_heartrate),as.numeric)
+    mutate_at(vars(average_heartrate),as.numeric)
   
   # # replace start coordinates with higher precision coords from decoded polyline
   # .data <- .data %>% 
@@ -356,9 +385,9 @@ reverse_geocode <- function(slids){
                start_latitude = lat,
                starting_location_id = slids) 
   starting_locations <- df %>% dplyr::distinct(start_longitude,
-                               start_latitude,
-                               starting_location_id,
-                               .keep_all = TRUE)
+                                               start_latitude,
+                                               starting_location_id,
+                                               .keep_all = TRUE)
   if(nrow(starting_locations) > 0){
     starting_locations$city <- starting_locations$zip <- starting_locations$state <- starting_locations$country <- as.character(NA)
     # Doing in a loop, even though not necessary, so as to save in case of failure

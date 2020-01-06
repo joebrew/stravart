@@ -1,7 +1,7 @@
 library(shiny)
 source('global.R')
 source('plot_functions.R')
-
+source('utils.R')
 if(interactive()){
   message('Interactive/testing mode')
   # testing url only
@@ -9,7 +9,7 @@ if(interactive()){
   APP_URL <- "http://localhost:8100/"
 } else {
   # deployed URL
-  APP_URL <- "https://joebrew.shinyapps.io/stravart/"
+  APP_URL <- "http://bohemia.team:3838/stravart"
 }
 
 
@@ -225,10 +225,10 @@ server <- function(input, output, session) {
     app_parameters$config_loaded <- 
       tryCatch({
         load_application_config()
-        loginfo('config.yml loaded',logger = 'config')
+        # loginfo('config.yml loaded',logger = 'config')
         T
       },error=function(e) {
-        loginfo('No config.yml file found',logger = 'config')
+        # loginfo('No config.yml file found',logger = 'config')
         return(F)
       })
     
@@ -258,10 +258,11 @@ server <- function(input, output, session) {
         
         # verify access_token is available
         if ('access_token' %in% names(app_parameters$token_data)) {
-          loginfo(glue('Using access token: {app_parameters$token_data$access_token} '),logger='authentication')
-        } else {
-          logerror_stop('Authorisation error',logger='authentication')
-        }
+          # loginfo(glue('Using access token: {app_parameters$token_data$access_token} '),logger='authentication')
+        } 
+        #else {
+          # logerror_stop('Authorisation error',logger='authentication')
+        # }
         shiny::setProgress(value=0.05,message = 'Logged in')
         # app_parameters$stoken <- add_headers(Authorization = paste0("Bearer ",app_parameters$token_data$access_token))
         
@@ -287,7 +288,7 @@ server <- function(input, output, session) {
 
         # 3.2 Download activity list ----
         shiny::setProgress(value=0.2,message = 'Connecting to strava')
-        loginfo('Downloading activities...',logger='api')
+        # loginfo('Downloading activities...',logger='api')
         shiny::setProgress(value=0.25,message = 'Downloading activity list')
         
         # Try to retrieve activity/athlete data from database
@@ -343,8 +344,8 @@ server <- function(input, output, session) {
                                         "'"))
 
         shiny::setProgress(value=0.6,message = 'Transforming data')
-        loginfo(glue('Downloaded {length(my_acts)} activities'),logger='api')
-        loginfo('Tidying complete',logger='api')
+        # loginfo(glue('Downloaded {length(my_acts)} activities'),logger='api')
+        # loginfo('Tidying complete',logger='api')
         
         # Update the athlete in the db
         # If this athlete is already in the db, drop the athlete entry and overwrite
@@ -437,8 +438,11 @@ server <- function(input, output, session) {
   
   # DYNAMICALLY CAPTURE APPLICATION URL ----
   observe({
+    save(session, file = 'session.RData')
     app_url <- parse_application_url(session)
-    loginfo(glue('Captured application url as {app_url}'),logger='config')
+    # loginfo(glue('Captured application url as {app_url}'),logger='config')
+    message(glue('Captured application url as {app_url}'))
+    
     updateTextInput(session,inputId = 'input_strava_app_url',value = app_url)
   })
   
@@ -555,7 +559,7 @@ server <- function(input, output, session) {
     #   input$selected_types
     # )
     
-    loginfo('Filter activities',logger='activities')
+    # loginfo('Filter activities',logger='activities')
     
     filtered_activities <- activities
     # activities <- app_parameters$activities

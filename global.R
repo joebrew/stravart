@@ -16,32 +16,28 @@ library(shinydashboard)
 library(shinythemes)
 library(logging)
 library(googlePolylines)
-library(shinyjs)
 library(tidyquant)
 library(yaml)
 require(dplyr)
 require(RPostgreSQL)
 require(readr)
 require(DBI)
-library(yaml)
-library(googlePolylines)
 library(gridExtra)
 library(revgeo)
-library(leaflet)
 library(sp)
 
 # Get creds
 creds <- yaml.load_file('credentials.yaml')
 
 # initialise logging ----
-basicConfig()
-dir.create('./logs/',showWarnings = F)
-addHandler(writeToFile,file=glue('./logs/{strftime(Sys.time(),\'%Y%m%d-%H%M%S\')}.log'))
+# basicConfig()
+# dir.create('./logs/',showWarnings = F)
+# addHandler(writeToFile,file=glue('./logs/{strftime(Sys.time(),\'%Y%m%d-%H%M%S\')}.log'))
 #addHandler(writeToConsole)
 
 # file dependencies ----
 
-loginfo('Load file depencencies',logger='authentication')
+# loginfo('Load file depencencies',logger='authentication')
 source('./utils.R')
 source("./dplyr_verbs.R")
 
