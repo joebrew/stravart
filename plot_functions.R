@@ -123,7 +123,7 @@ make_location_maps <- function(activities,
              y = lat,
              group = id)) +
     geom_path(#alpha = 0.8,
-              size = 0.1,
+              size = 0.2,
       # aes(color = city), 
       lineend = "round") +
     facet_wrap(~city,
@@ -134,15 +134,25 @@ make_location_maps <- function(activities,
     theme(strip.text = element_text(size = 8)) 
 }
 
-library(leaflet)
+
 make_interactive_map <- function(activities){
   pd <- decode_df(activities = activities) %>%
-    mutate(lng = lon)
+    mutate(lng = lon) %>%
+    filter(!is.na(lng))
+  pd <- data.frame(pd)
+  # coordinates(pd) <- ~lng+lat
+  # proj4string(pd) <- CRS("+proj=longlat")
+  # d <- pd
+  # ## list of Lines per id, each with one Line in a list
+  # x <- lapply(split(d, d$id), function(x) Lines(list(Line(coordinates(x))), x$id[1L]))
+  # 
+  # # the corrected part goes here:
+  # lines <- SpatialLines(x)
+  # data <- data.frame(id = unique(d$id))
+  # rownames(data) <- data$id
+  # pd <- SpatialLinesDataFrame(lines, data)
   l <- leaflet() %>%
-    addTiles()
-    # addPolylines(#map = pd,
-    #              lng = pd$lng,
-    #              lat = pd$lat,
-    #              group = pd$id)
+    addTiles() %>%
+    addProviderTiles(providers$Stamen.Watercolor)
   return(l)
 }

@@ -14,8 +14,14 @@ source('../utils.R', chdir = T)
 
 
 # Connect to the db
-pg = DBI::dbDriver("PostgreSQL")
-con = DBI::dbConnect(pg, dbname="stravart")
+# Get creds
+creds <- yaml.load_file('../credentials.yaml')
+creds <- yaml.load_file('credentials.yaml')
+creds_list <- credentials_extract( credentials_path = '.')
+creds_list <- creds_list[names(creds_list) %in% c('dbname', 'host', 'port', 'user', 'password')]
+creds_list$drv <- DBI::dbDriver("PostgreSQL")
+con = do.call(DBI::dbConnect, creds_list)
+
 
 # Load activities
 streams <- dbReadTable(conn = con, name = 'streams')

@@ -5,9 +5,12 @@ require(readr)
 require(DBI)
 library(yaml)
 source('../global.R', chdir = T)
-
+source('../utils.R')
 # Get creds
 creds <- yaml.load_file('../credentials.yaml')
+creds_list <- credentials_extract( credentials_path = '../')
+creds_list <- creds_list[names(creds_list) %in% c('dbname', 'host', 'port', 'user', 'password')]
+creds_list$drv <- DBI::dbDriver("PostgreSQL")
 
 # Define the token
 
@@ -28,8 +31,7 @@ dir.create(paste0('../cache/', id), showWarnings = FALSE)
 saveRDS(stoken, file = paste0('../cache/', id, '/stoken.rds'))
 
 # Connect to the db
-pg = DBI::dbDriver("PostgreSQL")
-con = DBI::dbConnect(pg, dbname="stravart")
+con = do.call(DBI::dbConnect, creds_list)
 
 # Read in current stuff in the db
 old_starting_locations <- dbReadTable(conn = con,name = 'starting_locations')

@@ -28,6 +28,7 @@ library(googlePolylines)
 library(gridExtra)
 library(revgeo)
 library(leaflet)
+library(sp)
 
 # Get creds
 creds <- yaml.load_file('credentials.yaml')
@@ -72,32 +73,17 @@ periods <- list(
 creds <- yaml.load_file('credentials.yaml')
 creds_list <- credentials_extract( credentials_path = '.')
 creds_list <- creds_list[names(creds_list) %in% c('dbname', 'host', 'port', 'user', 'password')]
-
+creds_list$drv <- DBI::dbDriver("PostgreSQL")
 # Connect to the db
-connect_psql <- function(){DBI::dbConnect(drv = pg)}
-pg = DBI::dbDriver("PostgreSQL")
-# con = do.call(connect_psql, creds_list)
-con = do.call(src_postgres, creds_list)
+con = do.call(DBI::dbConnect, creds_list)
+# con = do.call(src_postgres, creds_list)
 # con = DBI::dbConnect(pg, dbname="stravart")
 message('-Connected to the stravart database')
 for(i in 1:length(creds_list)){
-  if(names(creds_list)[i] != 'password'){
+  if(!names(creds_list)[i] %in% c('password', 'drv')){
     message('---', names(creds_list)[i], ': ', creds_list[[i]])
   }
 }
-
-# dplyr database functions
-db_read_table <- function(conn, name){
-  tbl(con, name) %>% collect
-}
-db_write_table <- function(conn = con,
-                           name = 'activities',
-                           value = new_acts,
-                           append = TRUE,
-                           row.names = FALSE){
-  
-}
-
-
-# Already geocoded starting locations
-old_starting_locations <- db_read_table(conn = con,name = 'starting_locations')
+# 
+# # Already geocoded starting locations
+# old_starting_locations <- dbReadTable(conn = con,name = 'starting_locations')
