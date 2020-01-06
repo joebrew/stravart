@@ -7,10 +7,14 @@ if(interactive()){
   # testing url only
   options(shiny.port = 8100)
   APP_URL <- "http://localhost:8100/"
+  options(httr_oob_default=FALSE)
 } else {
   # deployed URL
+  # https://support.rstudio.com/hc/en-us/articles/217952868-Generating-OAuth-tokens-for-a-server-using-httr
+  options(httr_oob_default=TRUE)
   APP_URL <- "http://bohemia.team:3838/stravart"
 }
+# APP_URL <- "http://bohemia.team:3838/stravart"
 
 
 config_panel <- shinyjs::hidden(
@@ -265,10 +269,11 @@ server <- function(input, output, session) {
         # }
         shiny::setProgress(value=0.05,message = 'Logged in')
         # app_parameters$stoken <- add_headers(Authorization = paste0("Bearer ",app_parameters$token_data$access_token))
+        # app_parameters$stoken <- add_headers(Authorization = paste0("Bearer ",app_parameters$token_data$access_token))
         
-        app_parameters$stoken <- httr::config(token = stravauth(app_name = 'GPSart', 
-                                                                   app_client_id = 19335, 
-                                                                   app_secret = creds$app_secret, 
+        app_parameters$stoken <- httr::config(token = stravauth(app_name = 'GPSart',
+                                                                   app_client_id = app_parameters$token_data$strava_app_client_id,
+                                                                   app_secret = app_parameters$token_data$strava_app_secret,
                                                                    app_scope="activity:read_all",
                                                                 redirect_uri = APP_URL))
         
