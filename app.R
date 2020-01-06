@@ -329,11 +329,14 @@ server <- function(input, output, session) {
           new_acts <- new_acts[,names(new_acts) %in%activities_column_names]
           message('---Writing ', nrow(new_acts), ' new activities to the database for athlete ', id)
           # Write the new acts to the table
-          dbWriteTable(conn = con,
-                       name = 'activities',
-                       value = new_acts,
-                       append = TRUE,
-                       row.names = FALSE)
+          db_insert_into(con = con,
+                         table = 'activities',
+                         values = new_acts)
+          # dbWriteTable(conn = con,
+          #              name = 'activities',
+          #              value = new_acts,
+          #              append = TRUE,
+          #              row.names = FALSE)
         } else {
           message('---No new activities for athlete ', id)
         }
@@ -356,11 +359,14 @@ server <- function(input, output, session) {
           dbSendQuery(conn = con,
                       statement = paste0('DELETE FROM athletes WHERE id = ', id))
           # Add new row
-          dbWriteTable(conn = con,
-                       name = 'athletes', 
-                       value = data.frame(tidy_athlete(my_athlete)),
-                       append = TRUE,
-                       row.names = FALSE)
+          db_insert_into(con = con,
+                         table = 'athletes',
+                         values = data.frame(tidy_athlete(my_athlete)))
+          # dbWriteTable(conn = con,
+          #              name = 'athletes', 
+          #              value = data.frame(tidy_athlete(my_athlete)),
+          #              append = TRUE,
+          #              row.names = FALSE)
           
         }
         # Upodate the in-session data pertaining to the athlete
@@ -379,7 +385,7 @@ server <- function(input, output, session) {
         slids <- slids[!is.na(slids)]
         slids <- sort(unique(slids))
         # Get already geocoded starting locations
-        old_starting_locations <- dbReadTable(conn = con,name = 'starting_locations')
+        old_starting_locations <- db_read_table(conn = con,name = 'starting_locations')
         # Remove those slids which are already geocoded
         slids <- slids[!slids %in% old_starting_locations$starting_location_id]
         shiny::setProgress(value=0.6,message = 'Reverse geocoding activity starting locations')
@@ -388,7 +394,8 @@ server <- function(input, output, session) {
           geocoded_slids <- reverse_geocode(slids = slids)
           # Add the geocoded slids to the db
           message('Adding starting_locations to the database')
-          dbWriteTable(con, "starting_locations", data.frame(geocoded_slids), append = TRUE, row.names = FALSE)
+          db_insert_into(con = con, table = 'starting_locations', values = data.frame(geocoded_slids))
+          # dbWriteTable(con, "starting_locations", data.frame(geocoded_slids), append = TRUE, row.names = FALSE)
         }
         shiny::setProgress(value=1,message = 'Complete')
       },
@@ -396,7 +403,7 @@ server <- function(input, output, session) {
       max = 1)
       
       # Get starting locations
-      app_parameters$starting_locations <- dbReadTable(conn = con, 
+      app_parameters$starting_locations <- db_read_table(conn = con, 
                                                        name = 'starting_locations')
       
       # # save to global parameters

@@ -70,11 +70,34 @@ periods <- list(
 
 # Connect to the database
 creds <- yaml.load_file('credentials.yaml')
+creds_list <- credentials_extract( credentials_path = '.')
+creds_list <- creds_list[names(creds_list) %in% c('dbname', 'host', 'port', 'user', 'password')]
 
 # Connect to the db
+connect_psql <- function(){DBI::dbConnect(drv = pg)}
 pg = DBI::dbDriver("PostgreSQL")
-con = DBI::dbConnect(pg, dbname="stravart")
+# con = do.call(connect_psql, creds_list)
+con = do.call(src_postgres, creds_list)
+# con = DBI::dbConnect(pg, dbname="stravart")
 message('-Connected to the stravart database')
+for(i in 1:length(creds_list)){
+  if(names(creds_list)[i] != 'password'){
+    message('---', names(creds_list)[i], ': ', creds_list[[i]])
+  }
+}
+
+# dplyr database functions
+db_read_table <- function(conn, name){
+  tbl(con, name) %>% collect
+}
+db_write_table <- function(conn = con,
+                           name = 'activities',
+                           value = new_acts,
+                           append = TRUE,
+                           row.names = FALSE){
+  
+}
+
 
 # Already geocoded starting locations
-old_starting_locations <- dbReadTable(conn = con,name = 'starting_locations')
+old_starting_locations <- db_read_table(conn = con,name = 'starting_locations')

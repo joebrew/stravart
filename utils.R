@@ -408,3 +408,61 @@ get_avg_location <- function(decoded_df){
               lat = mean(lat))
   return(out)
 }
+
+# Define function for credentials extraction
+library(yaml)
+credentials_extract <- function (credentials_path = NULL, credentials_folder = TRUE, 
+                                 credentials_file = "credentials.yaml", credentials_search_limit = 10, 
+                                 all_in_file = FALSE) 
+{
+  if (all_in_file) {
+    credentials_path <- credentials_file
+  }
+  else {
+    if (is.null(credentials_file)) {
+      credentials_file <- "credentials.yaml"
+    }
+    if (is.null(credentials_path)) {
+      this_dir <- getwd()
+      credentials_in_dir <- credentials_file %in% dir(paste0(this_dir, 
+                                                             ifelse(credentials_folder, "/credentials", "")))
+      chop_dir <- function(x) {
+        x_split <- unlist(strsplit(x, "/"))
+        x_split <- x_split[1:(length(x_split) - 1)]
+        paste0(x_split, collapse = "/")
+      }
+      credentials_search_counter <- 0
+      while (!credentials_in_dir & credentials_search_counter <= 
+             credentials_search_limit) {
+        this_dir <- chop_dir(this_dir)
+        credentials_in_dir <- credentials_file %in% dir(paste0(this_dir, 
+                                                               ifelse(credentials_folder, "/credentials", 
+                                                                      "")))
+        credentials_search_counter <- credentials_search_counter + 
+          1
+      }
+      credentials_path <- paste0(this_dir, paste0(ifelse(credentials_folder, 
+                                                         "/credentials/", "/"), credentials_file))
+    }
+    else {
+      credentials_path <- paste0(credentials_path, "/", 
+                                 credentials_file)
+      credentials_path <- gsub("//", "/", credentials_path)
+    }
+    message(paste0("Using credentials at ", credentials_path))
+    good_to_go <- file.exists(credentials_path) & !dir.exists(credentials_path)
+    if (!good_to_go) {
+      credentials_path <- NULL
+    }
+    if (is.null(credentials_path)) {
+      stop(paste0("No credentials file could be find. Ensure you have one."))
+    }
+  }
+  credentials <- yaml.load_file(credentials_path)
+  return(credentials)
+}
+# Define function for credentials connection
+credentials_connect <- function (options_list) {
+  connection_object <- do.call(src_mysql, options_list)
+  return(connection_object)
+}
