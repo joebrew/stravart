@@ -20,8 +20,8 @@ app <- oauth_app(appname = 'GPSArt',
                  key = creds$client_id, 
                  secret = creds$app_secret,
                  redirect_uri = app_url)
-api <- oauth_endpoint(request = "https://www.strava.com/oauth/authorize?", 
-                      authorize = "https://www.strava.com/oauth/authorize", 
+api <- oauth_endpoint(request = "https://www.strava.com/oauth/mobile/authorize?", # consider removing "mobile" if problematic
+                      authorize = "https://www.strava.com/oauth/mobile/authorize", # consider removing "mobile" if problematic 
                       access = "https://www.strava.com/oauth/token")
 
 scope <- "activity:read_all"
@@ -33,14 +33,17 @@ params <- list(client_id='19335',
 
 ui <- fluidPage(
   # Regular UI goes here
-  verbatimTextOutput("code")
+  verbatimTextOutput("code"),
+  mobileDetect('isMobile'),
+  textOutput('isItMobile')
 )
 uiFunc <- function(req) {
   if (!has_auth_code(parseQueryString(req$QUERY_STRING))) {
     # OAuthorize
-    url <- oauth2.0_authorize_url(api, app, scope=scope, query_extra=params)
-    redirect <- sprintf("location.replace(\"%s\");", url)
-    tags$script(HTML(redirect))
+    # url <- oauth2.0_authorize_url(api, app, scope=scope, query_extra=params)
+    # redirect <- sprintf("location.replace(\"%s\");", url)
+    uiOutput('auth_submit_button')
+    # tags$script(HTML(redirect))
   } else {
     # Manually create a token
     token <- oauth2.0_token(
@@ -54,6 +57,20 @@ uiFunc <- function(req) {
 }
 
 server <- function(input, output, session) {
+  
+  # Mobile phone detection
+  output$isItMobile <- renderText({
+    ifelse(input$isMobile, "You are on a mobile device", "You are not on a mobile device")
+  })
+  
+  # Button for going to authentication page
+  output$auth_submit_button <- renderUI({
+    url <- oauth2.0_authorize_url(api, app, scope=scope, query_extra=params)
+    a(
+      img(src = 'btn_strava_connectwith_light.png'),
+      href = url
+    )
+  })
   
   # See whether there is an authorisation code
   params <- parseQueryString(isolate(session$clientData$url_search))
@@ -74,5 +91,7 @@ server <- function(input, output, session) {
     resp$lastname
   })
 }
-
+onStop(function() {
+  dbDisconnect(con)
+})
 shinyApp(uiFunc, server)

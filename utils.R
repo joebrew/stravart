@@ -528,3 +528,13 @@ credentials_connect <- function (options_list) {
   connection_object <- do.call(src_mysql, options_list)
   return(connection_object)
 }
+
+# Mobile phone detection
+mobileDetect <- function(inputId, value = 0) {
+  tagList(
+    singleton(tags$head(tags$script(src = "js/mobile.js"))),
+    tags$input(id = inputId,
+               class = "mobile-element",
+               type = "hidden")
+  )
+}
