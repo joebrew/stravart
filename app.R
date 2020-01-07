@@ -6,13 +6,18 @@ if(interactive()){
   message('Interactive/testing mode')
   # testing url only
   options(shiny.port = 8100)
-  APP_URL <- "http://localhost:8100/"
-  options(httr_oob_default=FALSE)
+  # APP_URL <- "http://localhost:8100/"
+  APP_URL <- "http://127.0.0.1:8100/"
+  # options(httr_oob_default=FALSE)
+  # oob <- FALSE
+  # cache <- FALSE
 } else {
   # deployed URL
   # https://support.rstudio.com/hc/en-us/articles/217952868-Generating-OAuth-tokens-for-a-server-using-httr
-  options(httr_oob_default=TRUE)
+  # options(httr_oob_default=TRUE)
   APP_URL <- "http://bohemia.team:3838/stravart"
+  # oob <- TRUE
+  # cache <- TRUE
 }
 # APP_URL <- "http://bohemia.team:3838/stravart"
 
@@ -272,10 +277,13 @@ server <- function(input, output, session) {
         # app_parameters$stoken <- add_headers(Authorization = paste0("Bearer ",app_parameters$token_data$access_token))
         
         app_parameters$stoken <- httr::config(token = stravauth(app_name = 'GPSart',
-                                                                   app_client_id = app_parameters$token_data$strava_app_client_id,
-                                                                   app_secret = app_parameters$token_data$strava_app_secret,
+                                                                   app_client_id = 19335, #app_parameters$token_data$strava_app_client_id,
+                                                                   app_secret = creds$app_secret, #app_parameters$token_data$strava_app_secret,
                                                                    app_scope="activity:read_all",
-                                                                redirect_uri = APP_URL))
+                                                                redirect_uri = APP_URL#,
+                                                                # use_oob = oob,
+                                                                # cache = FALSE
+                                                                ))
         
         # Retrieve the athlete
         my_athlete <- get_athlete(stoken = app_parameters$stoken)
@@ -443,7 +451,6 @@ server <- function(input, output, session) {
   
   # DYNAMICALLY CAPTURE APPLICATION URL ----
   observe({
-    save(session, file = 'session.RData')
     app_url <- parse_application_url(session)
     # loginfo(glue('Captured application url as {app_url}'),logger='config')
     message(glue('Captured application url as {app_url}'))

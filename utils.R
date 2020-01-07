@@ -308,14 +308,19 @@ extract_starting_locations <- function(activities){
 
 # Define function for authentication (modification of strava_oauth)
 stravauth <- function (app_name, app_client_id, app_secret, app_scope = "public", 
-                       cache = FALSE, redirect_uri = oauth_callback()){
+                       cache = FALSE,
+                       # use_oob = FALSE,
+                       # cache = getOption("httr_oauth_cache"),
+                       redirect_uri = oauth_callback()){
   strava_app <- oauth_app(appname = app_name, key = app_client_id, 
                           secret = app_secret)
   strava_end <- oauth_endpoint(request = "https://www.strava.com/oauth/authorize?", 
                                authorize = "https://www.strava.com/oauth/authorize", 
                                access = "https://www.strava.com/oauth/token")
-  oauth2.0_token(endpoint = strava_end, app = strava_app, scope = app_scope, 
-                 cache = cache)
+  oauth2.0_token(endpoint = strava_end, app = strava_app,  
+                 # cache = cache,
+                 # use_oob = use_oob,
+                 scope = app_scope)
 }
 
 theme_black = function(base_size = 12, base_family = "") {

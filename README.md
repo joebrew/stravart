@@ -69,6 +69,7 @@ psql -f stravart.sql --host stravart-instance.cfejspjhdciw.us-east-2.rds.amazona
 - Install the relevant packages if not already installed
 
 sudo apt-get install libxml2-dev
+sudo apt-get install libjq-dev
 sudo su - -c "R -e \"install.packages('leaflet.extras')\""
 sudo su - -c "R -e \"install.packages('shinydashboard')\""
 sudo su - -c "R -e \"install.packages('jqr')\""
@@ -106,6 +107,20 @@ sudo systemctl restart shiny-server
 - Change the `listen 3838;` to `listen 80;`
 - Restart: `sudo service shiny-server restart`
 
+### Deal with `.httr-oauth` token
+
+Run the following locally in order to get a token
+
+```
+stoken <- httr::config(token = stravauth(app_name = 'GPSart',
+                                                                   app_client_id = app_parameters$token_data$strava_app_client_id,
+                                                                   app_secret = app_parameters$token_data$strava_app_secret,
+                                                                   app_scope="activity:read_all",
+                                                                redirect_uri = "http://localhost:8100/",
+                                                                use_oob = FALSE,
+                                                                cache = TRUE))
+```
+
 ### On local machine
 
 - Transfer the local app stuff to the remote machine:
@@ -118,10 +133,8 @@ scp -r -i "/home/joebrew/.ssh/openhdskey.pem" /home/joebrew/Documents/stravart u
 - Move things around and grant permissions:
 
 ```
-sudo cp -r /home/ubuntu/Documents/stravart /srv/shiny-server/stravart
-
-cd /srv/shiny-server
-sudo chmod -R 777 stravart/
-
-sudo systemctl restart shiny-server
+sudo cp -r /home/ubuntu/Documents/stravart /srv/shiny-server/stravart;
+cd /srv/shiny-server;
+sudo chmod -R 777 stravart/;
+sudo systemctl restart shiny-server;
 ```
