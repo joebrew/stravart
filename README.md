@@ -33,6 +33,14 @@ psql --host stravart-instance.cfejspjhdciw.us-east-2.rds.amazonaws.com --port 54
 ```
 - When prompted for the password, use the `password` field in the `credentials.yaml` file
 
+- To kill all open connections:
+```
+SELECT pg_terminate_backend(pg_stat_activity.pid)
+FROM pg_stat_activity
+WHERE pg_stat_activity.datname = 'stravart'
+  AND pid <> pg_backend_pid();
+```
+
 ## Create a database locally for development
 - Get into the postgres cli: `psql`
 - Run: `create database stravart`
@@ -96,6 +104,7 @@ sudo su - -c "R -e \"install.packages('readr')\""
 sudo su - -c "R -e \"install.packages('DBI')\""
 sudo su - -c "R -e \"install.packages('gridExtra')\""
 sudo su - -c "R -e \"install.packages('revgeo')\""
+sudo su - -c "R -e \"install.packages('shinythemes')\""
 sudo su - -c "R -e \"devtools::install_github('fawda123/rStrava', dependencies = TRUE, force = TRUE)\""
 
 

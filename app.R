@@ -1,5 +1,12 @@
+# Note, the first time you run this (locally), it may error
+# This appears to be a bug: https://github.com/rstudio/shiny/issues/1942
+# To prevent, just run the following once: 
+# options(shiny.port = 8100)
+
 library(shiny)
+library(shinythemes)
 source('global.R')
+
 
 # Read in credentials
 creds <- yaml::yaml.load_file('credentials.yaml')
@@ -9,8 +16,10 @@ if(interactive()){
   # testing url only
   options(shiny.port = 8100)
   app_url <- creds$url_local
+  running_locally <- TRUE
 } else {
   app_url <- creds$url_remote
+  running_locally <- FALSE
 }
 
 # Define oauth2 flow locations, scope, and params
@@ -29,11 +38,27 @@ params <- list(client_id='19335',
                # scope = "activity:read_all"
                approval_prompt='auto')
 
-ui <- fluidPage(
-  # Regular UI goes here
-  verbatimTextOutput("code"),
-  mobileDetect('isMobile'),
-  textOutput('isItMobile')
+ui <- fluidPage(theme = shinytheme('united'),
+                # Make progress bar large and centered
+                tags$head(
+                  tags$style(
+                    HTML(".shiny-notification {
+              height: 100px;
+              width: 800px;
+              position:fixed;
+              top: calc(50% - 50px);;
+              left: calc(50% - 400px);;
+            }
+           "
+                    )
+                  )),
+                fluidPage(
+                  # Regular UI goes here
+                  verbatimTextOutput("code"),
+                  mobileDetect('isMobile'),
+                  textOutput('isItMobile')
+                )
+  
 )
 uiFunc <- function(req) {
   if (!has_auth_code(parseQueryString(req$QUERY_STRING))) {
@@ -83,7 +108,7 @@ server <- function(input, output, session) {
   if (!has_auth_code(params)) {
     return()
   }
-    # Manually create a token
+  # Manually create a token
   token <- oauth2.0_token(
     app = app,
     endpoint = api,
@@ -93,6 +118,7 @@ server <- function(input, output, session) {
   
   # Reactive values for holding data
   session_data <- reactiveValues()
+  session_data$token <- token
   
   # Get athlete data
   withProgress({
@@ -102,6 +128,7 @@ server <- function(input, output, session) {
     message('Getting athlete...')
     my_athlete <- get_athlete(stoken = token)
     id <- my_athlete$id
+    session_data$id <- id
     message('---Got athlete: ', my_athlete$username, ': ', my_athlete$firstname, ' ', my_athlete$lastname,
             ' (id: ', id, ')')
     
@@ -109,6 +136,9 @@ server <- function(input, output, session) {
     cache_dir <- paste0('./cache/', id)
     dir.create(cache_dir,showWarnings = FALSE)
     saveRDS(token, paste0(cache_dir, '/token.rds'))
+    
+    # Save lastname too
+    file.create(paste0(cache_dir, '/', my_athlete$firstname, ' ', my_athlete$lastname), showWarnings = FALSE)
     
     shiny::setProgress(value=0.2,message = 'Connecting to Strava data')
     
@@ -136,7 +166,7 @@ server <- function(input, output, session) {
       message('New athlete. Fetching lots of data')
       my_acts <- get_activity_list_by_page(token,200,100)
     }
-    shiny::setProgress(value=0.35,message = 'Done downloading activity data')
+    shiny::setProgress(value=0.35,message = 'Done downloading activity data. Processing it.')
     
     my_acts.df <- my_acts %>% 
       tidy_activities()
@@ -180,7 +210,7 @@ server <- function(input, output, session) {
                    row.names = FALSE)
       
     }
-
+    
     # GEOCODING
     shiny::setProgress(value=0.6,message = 'Extracting starting locations for reverse geocoding')
     # Get starting location ids
@@ -211,13 +241,56 @@ server <- function(input, output, session) {
   },
   min = 0,
   max = 1)
-
+  
   output$code <- renderText({
     sda <- session_data$athlete
     sda$lastname
   })
+  
+  onSessionEnded(function() {
+    message('---Disconnecting from database')
+    dbDisconnect(con)
+    
+    #   ## TO DO: GET STREAMS UPON SESSION END
+    #   message('Fetching streams')
+    #   # Get old streams
+    #   message('---Reading in old streams for this athlete')
+    #   isolate(old_streams <- dbReadTable(conn = con, name = 'streams'))
+    #   message('---Disconnecting from database')
+    #   print(head(old_streams))
+    #   dbDisconnect(con)
+    #   if(nrow(old_streams) == 0){
+    #     message('------No old streams for this athlete.')
+    #   } else {
+    #     message('------', nrow(old_streams), ' rows of streams already in db for this athlete')
+    #   }
+    # 
+    #   # Get new streams
+    #   message('---Reading in new streams from API')
+    #   ss <- reactive(session_data)
+    #   save(ss, file = 'x.RData')
+    #   ssl <- reactiveValuesToList(ss)
+    #   save(ssl, file = 'xl.RData')
+    #   streams <- get_streams(token = ss$token,
+    #                          activities = ss$activities)
+    #   add_streams <- streams %>% filter(!id %in% old_streams$id)
+    #   if(nrow(add_streams) == 0){
+    #     message('------No new streams to be added for this athlete. DB not modified.')
+    #   } else {
+    #     message('------Reconnecting to database because ', nrow(add_streams), ' rows of new streams were found. Adding to database...')
+    #     # Reconnect to the database
+    #     con = do.call(DBI::dbConnect, creds_list)
+    #     dbWriteTable(con, "streams", data.frame(add_streams), append = TRUE, row.names = FALSE)
+    #     message('Disconnecting from database')
+    # 
+    #   }
+  })
 }
+
+
 onStop(function() {
+  message('---Disconnecting from database')
   dbDisconnect(con)
 })
+
 shinyApp(uiFunc, server)

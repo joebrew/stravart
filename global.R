@@ -47,3 +47,23 @@ for(i in 1:length(creds_list)){
     message('---', names(creds_list)[i], ': ', creds_list[[i]])
   }
 }
+
+# # Set the option manually to the right port if local (otherwise failure on reconnect first time)
+# wd <- getwd()
+# if(wd == '/home/joebrew/Documents/stravart'){
+#   options(shiny.port = 8100)
+# }
+
+where_are_the_tokens <- function(){
+  owd <- getwd()
+  setwd('~/Documents/stravart')
+  files <- dir('cache', recursive = T)
+  files <- files[!grepl('.rds', files, fixed = TRUE)]
+  files_split <- strsplit(files, '/')
+  ids <- unlist(lapply(files_split, function(x){x[1]}))
+  people <- unlist(lapply(files_split, function(x){x[2]}))
+  out <- tibble(id = ids,
+         name = people)
+  setwd(owd)
+  return(out)
+}

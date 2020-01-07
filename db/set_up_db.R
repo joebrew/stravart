@@ -15,16 +15,16 @@ creds_list$drv <- DBI::dbDriver("PostgreSQL")
 # Define the token
 
 # # Specific id
-id = 21309810
-stoken <- readRDS(paste0('../cache/', id, '/stoken.rds'))
-
+watt <- where_are_the_tokens()
+id = 21471474
+token <- readRDS(paste0('../cache/', id, '/token.rds'))
 # # # Anyone
 # stoken <- httr::config(token = strava_oauth(app_name = 'GPSart',
 #                                             app_client_id = 19335,
 #                                             app_secret = creds$app_secret,
 #                                             app_scope="activity:read"))
-my_athlete <- get_athlete(stoken = stoken)
-my_athlete$lastname
+my_athlete <- get_athlete(stoken = token)
+paste0(my_athlete$firstname, ' ', my_athlete$lastname)
 id <- my_athlete$id
 
 dir.create(paste0('../cache/', id), showWarnings = FALSE)

@@ -538,3 +538,33 @@ mobileDetect <- function(inputId, value = 0) {
                type = "hidden")
   )
 }
+
+get_streams <- function(token, activities){
+  streams_list <- list()
+
+  counter <- 0
+  for(i in 1:nrow(activities)){
+    # rStrava::ratelimit()
+    ul <- usage_left
+    
+    if(ul[1] < 100){
+      message('Reached 500 of the 600 limit, taking a 15 minute break')
+      Sys.sleep(15 * 60)
+    }
+    if(ul[2] < 100){
+      message('Too close to daily limit, not getting any streams')
+      return(tibble())
+    }
+    
+    message('...---getting stream ', i, ' of ', nrow(activities))
+    this_activity <- activities[i,]
+    this_id <- this_activity$id
+    if(!is.na(this_activity$start_latlng1)){
+      counter <- counter + 1
+      this_stream <- get_activity_streams(act_data = activities[i,], stoken = token)
+      streams_list[[counter]] <- this_stream
+    }
+  }
+  streams <- bind_rows(streams_list)
+  return(streams)
+}

@@ -9,13 +9,20 @@ scp -r -i "/home/joebrew/.ssh/openhdskey.pem" /home/joebrew/Documents/stravart/c
 
 scp -r -i "/home/joebrew/.ssh/openhdskey.pem" /home/joebrew/Documents/stravart/plot_functions.R  ubuntu@bohemia.team:/home/ubuntu/Documents/stravart/plot_functions.R
 
+
+scp -r -i "/home/joebrew/.ssh/openhdskey.pem" /home/joebrew/Documents/stravart/cache  ubuntu@bohemia.team:/home/ubuntu/Documents/stravart/cache
+
 : '
-Run the below on the server side
+Run the below on the server side:
+
 cd /srv/shiny-server/stravart;
 cp ~/Documents/stravart/app.R .;
 cp ~/Documents/stravart/utils.R .;
 cp ~/Documents/stravart/global.R .;
 cp ~/Documents/stravart/credentials.yaml .;
 cp ~/Documents/stravart/plot_functions.R .;
+cp -R ~/Documents/stravart/cache .;
+
 sudo systemctl restart shiny-server;
+
 '
