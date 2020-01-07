@@ -109,7 +109,7 @@ sudo systemctl restart shiny-server
 
 ### Deal with `.httr-oauth` token
 
-Run the following locally in order to get a token
+Run the following locally in order to get a token (maybe not necessary)
 
 ```
 stoken <- httr::config(token = stravauth(app_name = 'GPSart',

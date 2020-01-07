@@ -97,7 +97,7 @@ post_authorisation_code <- function(
                      client_id = strava_app_client_id,
                      client_secret = strava_app_secret,
                      code = authorisation_code,
-                     scope = "activity:read"
+                     scope = "activity:read_all"
                    )
   )
   # returns json/list containing basic athlete information including the access token
@@ -309,7 +309,7 @@ extract_starting_locations <- function(activities){
 # Define function for authentication (modification of strava_oauth)
 stravauth <- function (app_name, app_client_id, app_secret, app_scope = "public", 
                        cache = FALSE,
-                       # use_oob = FALSE,
+                       use_oob = FALSE,
                        # cache = getOption("httr_oauth_cache"),
                        redirect_uri = oauth_callback()){
   strava_app <- oauth_app(appname = app_name, key = app_client_id, 
@@ -318,10 +318,35 @@ stravauth <- function (app_name, app_client_id, app_secret, app_scope = "public"
                                authorize = "https://www.strava.com/oauth/authorize", 
                                access = "https://www.strava.com/oauth/token")
   oauth2.0_token(endpoint = strava_end, app = strava_app,  
-                 # cache = cache,
-                 # use_oob = use_oob,
+                 cache = cache,
+                 use_oob = use_oob,
                  scope = app_scope)
 }
+
+do_url_auth <- function(app_name, app_client_id, app_secret, app_scope = "public", 
+                        cache = FALSE,
+                        use_oob = FALSE,
+                        # cache = getOption("httr_oauth_cache"),
+                        # redirect_uri = oauth_callback()
+                        redirect_uri = APP_URL){
+  strava_app <- oauth_app(appname = app_name, 
+                          key = app_client_id, 
+                          secret = app_secret)
+  strava_end <- oauth_endpoint(request = "https://www.strava.com/oauth/authorize?", 
+                               authorize = "https://www.strava.com/oauth/authorize", 
+                               access = "https://www.strava.com/oauth/token")
+  params <- list(client_id='19335',
+                 response_type='code',
+                 redirect_uri= redirect_uri,# 'http://bohemia.team:3838/stravart',
+                 # scope=activity%3Aread_all,
+                 approval_prompt='auto')
+  
+  url <- oauth2.0_authorize_url(endpoint = strava_end, app = strava_app, scope = app_scope,
+                         query_extra = params)
+  redirect <- sprintf("location.replace(\"%s\");", url)
+  tags$script(HTML(redirect))
+}
+
 
 theme_black = function(base_size = 12, base_family = "") {
   
