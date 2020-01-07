@@ -323,6 +323,9 @@ stravauth <- function (app_name, app_client_id, app_secret, app_scope = "public"
                  scope = app_scope)
 }
 
+has_auth_code <- function(params) return(!is.null(params$code))
+
+
 do_url_auth <- function(app_name, app_client_id, app_secret, app_scope = "public", 
                         cache = FALSE,
                         use_oob = FALSE,
