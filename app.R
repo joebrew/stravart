@@ -43,23 +43,32 @@ ui <- fluidPage(theme = shinytheme('united'),
                 tags$head(
                   tags$style(
                     HTML(".shiny-notification {
-              height: 100px;
-              width: 800px;
+              height: 150px;
+              width: 300px;
               position:fixed;
-              top: calc(50% - 50px);;
-              left: calc(50% - 400px);;
+              top: calc(50% - 75px);;
+              left: calc(50% - 300px);;
             }
            "
                     )
                   )),
                 fluidPage(
+                  
+                  fluidRow(column(6,align = 'center',
+                                  plotOutput('plot1')),
+                           column(6,align = 'center',
+                                  plotOutput('plot2'))),
+                  
+                  # fluidRow(column(12, align = 'center', h3('Still in development. Come back soon.'))),
                   # Regular UI goes here
-                  verbatimTextOutput("code"),
+                  # verbatimTextOutput("code"),
+                  fluidRow(column(12, align = 'center', h3(textOutput('development_text')))),
                   mobileDetect('isMobile'),
                   textOutput('isItMobile')
                 )
-  
 )
+
+
 uiFunc <- function(req) {
   if (!has_auth_code(parseQueryString(req$QUERY_STRING))) {
     # OAuthorize
@@ -92,6 +101,8 @@ server <- function(input, output, session) {
     
     fluidPage(
       fluidRow(column(12, align = 'center', h1('GPSart'))),
+      fluidRow(column(12, align = 'center', helpText('Beautiful, one-of-a-kind, personalized art prints based on your Strava activities'))),
+      fluidRow(column(12, align = 'center', h4('Click below to get started'))),
       fluidRow(
         column(12, align = 'center',
                a(
@@ -99,7 +110,31 @@ server <- function(input, output, session) {
                  href = url
                )
         )
-      )
+      ),
+      fluidRow(
+        column(12, align="center",
+               div(style="display: inline-block;",img(src="img/a.png", height=300, width=300)),
+               div(style="display: inline-block;",img(src="img/b.png", height=300, width=300)),
+               div(style="display: inline-block;",img(src="img/d.png", height=300, width=300)),
+               div(style="display: inline-block;",img(src="img/p.png", height=300, width=300)),
+               div(style="display: inline-block;",img(src="img/o.png", height=300, width=300)),
+               div(style="display: inline-block;",img(src="img/n.png", height=300, width=300)))),
+      fluidRow(
+        column(12, align="center",
+               div(style="display: inline-block;",img(src="img/j.png", height=300, width=300)),
+               div(style="display: inline-block;",img(src="img/g.png", height=300, width=300)),
+               div(style="display: inline-block;",img(src="img/h.png", height=300, width=300)),
+               div(style="display: inline-block;",img(src="img/r.png", height=300, width=300)),
+               div(style="display: inline-block;",img(src="img/l.png", height=300, width=300)),
+               div(style="display: inline-block;",img(src="img/i.png", height=300, width=300)))),
+      fluidRow(
+        column(12, align="center",
+               div(style="display: inline-block;",img(src="img/c.png", height=300, width=300)),
+               div(style="display: inline-block;",img(src="img/e.png", height=300, width=300)),
+               div(style="display: inline-block;",img(src="img/f.png", height=300, width=300)),
+               div(style="display: inline-block;",img(src="img/m.png", height=300, width=300)),
+               div(style="display: inline-block;",img(src="img/q.png", height=300, width=300)),
+               div(style="display: inline-block;",img(src="img/k.png", height=300, width=300))))
     )
   })
   
@@ -140,7 +175,7 @@ server <- function(input, output, session) {
     # Save lastname too
     file.create(paste0(cache_dir, '/', my_athlete$firstname, ' ', my_athlete$lastname), showWarnings = FALSE)
     
-    shiny::setProgress(value=0.2,message = 'Connecting to Strava data')
+    shiny::setProgress(value=0.2,message = 'Connecting to Strava to retrieve your data.')
     
     # Fetch activities, but first see if that athlete already has some activities in the database
     # (fetch fewer if the athlete already has some)
@@ -158,15 +193,17 @@ server <- function(input, output, session) {
                        statement = paste0('select * from activities limit 1'))[0,])
     # Get fewer activities if the id is already in the db
     # (this is just for the sake of speed, and should be improved at some point so as to ensure we're not over/under-fetching)
-    shiny::setProgress(value=0.25,message = 'Downloading activity data')
+    shiny::setProgress(value=0.25,message = 'Be patient: Downloading activity data')
     if(id %in% athlete_ids_already_in_db){
+      already <- TRUE
       message('Athlete already in DB. Just fetching some data')
       my_acts <- get_activity_list_by_page(token,30,1)
     } else {
+      already <- FALSE
       message('New athlete. Fetching lots of data')
       my_acts <- get_activity_list_by_page(token,200,100)
     }
-    shiny::setProgress(value=0.35,message = 'Done downloading activity data. Processing it.')
+    shiny::setProgress(value=0.35,message = 'Woohoo! Done downloading activity data. Now processing it.')
     
     my_acts.df <- my_acts %>% 
       tidy_activities()
@@ -221,7 +258,7 @@ server <- function(input, output, session) {
     old_starting_locations <- dbReadTable(conn = con,name = 'starting_locations')
     # Remove those slids which are already geocoded
     slids <- slids[!slids %in% old_starting_locations$starting_location_id]
-    shiny::setProgress(value=0.7,message = 'Reverse geocoding activity starting locations')
+    shiny::setProgress(value=0.7,message = 'This could take a while. Reverse geocoding activity starting locations')
     if(length(slids) > 0){
       # Geocode them
       geocoded_slids <- reverse_geocode(slids = slids)
@@ -241,11 +278,31 @@ server <- function(input, output, session) {
   },
   min = 0,
   max = 1)
+
   
-  output$code <- renderText({
+  output$development_text <- renderText({
     sda <- session_data$athlete
-    sda$lastname
+    fn <- sda$firstname
+    paste0('Hi ', fn, '. This app is still under development. Come back soon!')
   })
+  
+  output$plot1 <- renderPlot({
+    activities <- session_data$activities
+    if(!is.null(activities)){
+      make_tiny_maps(activities = activities)
+      }
+  })
+  
+  output$plot2 <- renderPlot({
+    activities <- session_data$activities
+    starting_locations <- session_data$starting_locations
+    
+    if(!is.null(activities)){
+      make_location_maps(activities = activities,
+                         starting_locations = starting_locations)  
+    }
+  })
+  
   
   onSessionEnded(function() {
     message('---Disconnecting from database')

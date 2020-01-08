@@ -1,4 +1,3 @@
-
 require(dplyr)
 require(RPostgreSQL)
 require(readr)
@@ -11,12 +10,12 @@ library(gridExtra)
 
 source('../global.R', chdir = T)
 source('../utils.R', chdir = T)
+source('../plot_functions.R', chdir = T)
 
 
 # Connect to the db
 # Get creds
 creds <- yaml.load_file('../credentials.yaml')
-creds <- yaml.load_file('credentials.yaml')
 creds_list <- credentials_extract( credentials_path = '.')
 creds_list <- creds_list[names(creds_list) %in% c('dbname', 'host', 'port', 'user', 'password')]
 creds_list$drv <- DBI::dbDriver("PostgreSQL")
@@ -24,17 +23,74 @@ con = do.call(DBI::dbConnect, creds_list)
 
 
 # Load activities
-streams <- dbReadTable(conn = con, name = 'streams')
+# streams <- dbReadTable(conn = con, name = 'streams')
 activities <- dbReadTable(conn = con,name = 'activities')
 starting_locations <- dbReadTable(conn = con,name = 'starting_locations')
+athletes <- dbReadTable(conn = con, name = 'athletes')
 dbDisconnect(conn = con)
 
-# Filter just for sergi vila
-this_id <- "2958750"
-activities <- activities %>% dplyr::filter(athlete.id == this_id)
-streams <- streams %>% dplyr::filter(id %in% activities$id)
+# Get match of names and ids
+watt <- where_are_the_tokens()
 
+# Define function for making a cool plot
+make_plot <- function(ids = watt$id, 
+                      activities, 
+                      starting_locations, 
+                      athletes,
+                      cols = NULL){
+  
+  # Filter for relevant ids
+  acts <- activities %>% filter(as.character(athlete.id) %in% as.character(ids)) %>%
+    filter(!is.na(start_latlng2))
+  
+  # Join activities to the starting locations
+  acts <- left_join(x = acts %>% mutate(starting_location_id = generate_starting_location_id(.)),
+                          y = starting_locations,
+                          by = c('starting_location_id'))
+  
+  # Unlist the activity polylines into a df
+  decoded <- decode_df(activities = acts)
+  
+  # Join the decoded activities to the activities meta info
+  joined <- left_join(decoded,
+                      acts %>% dplyr::select(id, city, state, country, athlete.id))
+  
+  # Join with the firstname of the athlete
+  joined <- left_join(joined,
+                      athletes %>% mutate(id = as.character(id)) %>%dplyr::select(id, firstname),
+                      by = c('athlete.id' = 'id'))
+  
+  joined <- joined %>% filter(city %in% c('Toronto'))
+  
+  # joined <- joined %>%
+  #   group_by(city) %>%
+  #   mutate(n = n()) %>%
+  #   filter(n > 10000)
+  
+  ggplot(data = joined,
+         aes(x = lon,
+             y = lat,
+             group = id)) +
+    geom_path(size = 0.35, lineend = "round",
+              aes(color = city),
+              # color = 'white',
+              alpha = 0.4) +
+    facet_wrap(~city, scales = 'free') +
+    theme_nothing() +
+    scale_color_manual(name = '', values = colorRampPalette(c(rainbow(2)))(length(unique(joined$city)))) +
+    theme(plot.background = element_rect(fill = 'black'),
+          legend.position = 'none',
+          strip.text = element_text(size = 6, color = 'grey')) 
+  
+}
 
+joe_activities = activities %>% filter(athlete.id == watt$id[watt$name == 'Joe Brew']) %>%
+  mutate(starting_location = generate_starting_location_id(.))
+joe_activities <- joe_activities %>% filter(!is.na(starting_location))
+
+joe_activities <- left_join(joe_activities,
+                            starting_locations,
+                            by = c('starting_location' = 'starting_location_id'))
 
 # Join activities to the starting locations
 activities <- left_join(x = activities,
@@ -42,7 +98,7 @@ activities <- left_join(x = activities,
                         by = c('start_latlng2' = 'start_longitude',
                                'start_latlng1' = 'start_latitude'))
 
-# Unlist the activity polylines into a df
+
 out <- list()
 for(i in 1:nrow(activities)){
   message(i)

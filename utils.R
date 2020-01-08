@@ -401,7 +401,7 @@ generate_starting_location_id <- function(activities){
   x <- activities %>%
     mutate(starting_location_id = ifelse(is.na(start_longitude) | is.na(start_latitude),
                                          NA,
-                                         paste0(start_longitude,',',start_latitude)))
+                                         paste0(round(start_longitude, 2),',',round(start_latitude, 2))))
   x$starting_location_id
 }
 
@@ -420,7 +420,10 @@ reverse_geocode <- function(slids){
   starting_locations <- df %>% dplyr::distinct(start_longitude,
                                                start_latitude,
                                                starting_location_id,
-                                               .keep_all = TRUE)
+                                               .keep_all = TRUE) %>%
+    filter(!is.na(start_longitude),
+           !is.na(starting_location_id),
+           !is.na(start_latitude))
   if(nrow(starting_locations) > 0){
     starting_locations$city <- starting_locations$zip <- starting_locations$state <- starting_locations$country <- as.character(NA)
     # Doing in a loop, even though not necessary, so as to save in case of failure

@@ -16,7 +16,7 @@ creds_list$drv <- DBI::dbDriver("PostgreSQL")
 
 # # Specific id
 watt <- where_are_the_tokens()
-id = 21471474
+id = 21309810
 token <- readRDS(paste0('../cache/', id, '/token.rds'))
 # # # Anyone
 # stoken <- httr::config(token = strava_oauth(app_name = 'GPSart',
@@ -28,7 +28,7 @@ paste0(my_athlete$firstname, ' ', my_athlete$lastname)
 id <- my_athlete$id
 
 dir.create(paste0('../cache/', id), showWarnings = FALSE)
-saveRDS(stoken, file = paste0('../cache/', id, '/stoken.rds'))
+saveRDS(stoken, file = paste0('../cache/', id, '/token.rds'))
 
 # Connect to the db
 con = do.call(DBI::dbConnect, creds_list)
@@ -48,7 +48,7 @@ dbWriteTable(con, "athletes", data.frame(add_athletes), append = TRUE, row.names
 
 
 # Get some activities
-my_acts <- get_activity_list_by_page(stoken,200,100)
+my_acts <- get_activity_list_by_page(token,200,100)
 my_acts_compiled <- compile_activities(actlist = my_acts)
 # # Clean them up
 # activities <- my_acts %>% 
