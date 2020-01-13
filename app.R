@@ -5,6 +5,9 @@
 
 library(shiny)
 library(shinythemes)
+library(sf)
+library(leaflet)
+library(leaflet.extras)
 source('global.R')
 
 
@@ -52,21 +55,26 @@ ui <- fluidPage(theme = shinytheme('united'),
            "
                     )
                   )),
-                fluidPage(
-                  
-                  fluidRow(column(6,align = 'center',
-                                  plotOutput('plot1')),
-                           column(6,align = 'center',
-                                  plotOutput('plot2'))),
-                  
-                  # fluidRow(column(12, align = 'center', h3('Still in development. Come back soon.'))),
-                  # Regular UI goes here
-                  # verbatimTextOutput("code"),
-                  fluidRow(column(12, align = 'center', h3(textOutput('development_text')))),
-                  mobileDetect('isMobile'),
-                  textOutput('isItMobile')
-                )
-)
+                sidebarLayout(
+                  sidebarPanel(h2('Side stuff')),
+                  mainPanel(
+                    tabsetPanel(type = "tabs",
+                                tabPanel("Plot", 
+                                         fluidPage(
+                                           
+                                           leafletOutput("leaf")
+                                           
+                                           
+                                         )),
+                                tabPanel("Slow", 
+                                         fluidPage(
+                                           fluidRow(column(12, align = 'center', h3(textOutput('development_text')))),
+                                           mobileDetect('isMobile'),
+                                           textOutput('isItMobile'),
+                                           fluidRow(column(6,align = 'center',
+                                                           plotOutput('plot1')),
+                                                    column(6,align = 'center',
+                                                           plotOutput('plot2')))))))))
 
 
 uiFunc <- function(req) {
@@ -303,6 +311,21 @@ server <- function(input, output, session) {
     }
   })
   
+  
+  output$leaf <- renderLeaflet({
+    m <- leaflet() %>% 
+      addTiles() %>% 
+      addDrawToolbar(polylineOptions = F, circleOptions = F, markerOptions = F,
+                     circleMarkerOptions = F, polygonOptions = F)
+  })
+  
+  observeEvent(input$leaf_draw_new_feature, {
+    feat <- input$leaf_draw_new_feature
+    coords <- unlist(feat$geometry$coordinates)
+    coords <- matrix(coords, ncol = 2, byrow = T)
+    poly <- st_sf(st_sfc(st_polygon(list(coords))), crs = 4326)
+    print(st_bbox(poly))
+  })
   
   onSessionEnded(function() {
     message('---Disconnecting from database')
