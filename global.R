@@ -67,3 +67,6 @@ where_are_the_tokens <- function(){
   setwd(owd)
   return(out)
 }
+
+# Remove any token leftover
+suppressWarnings(file.remove('token.RData'))

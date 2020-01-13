@@ -3,42 +3,6 @@ parse_authorisation_code <- function(session) {
   return(pars$code)
 }
 
-load_application_config <- function() {
-  
-  filename <- 'config.yml'
-  
-  if (!file.exists(filename)) stop('No config.yml file found')
-  
-  # read credentials
-  config <- yaml::read_yaml(filename)
-  
-  # load as environment variables
-  config %>% 
-    walk2(
-      names(config),
-      function(value,key) {
-        value <- list(value)
-        names(value) <- key
-        do.call(Sys.setenv, value)
-      }
-    )
-  
-}
-
-# parse_application_url <- function(session) {
-#   
-#   paste0(session$clientData$url_protocol,
-#          "//",
-#          session$clientData$url_hostname, 
-#          ifelse(
-#            session$clientData$url_hostname == "127.0.0.1", 
-#            ":",
-#            session$clientData$url_pathname
-#          ),
-#          session$clientData$url_port
-#   )
-# }
-
 parse_application_url <- function(session) {
   local_mode <- session$clientData$url_hostname == "127.0.0.1"
   message('url_protocol= ', session$clientData$url_protocol)
@@ -70,38 +34,6 @@ parse_application_url <- function(session) {
 logerror_stop <- function(msg,logger) {
   logerror(msg,logger=logger)
   stop(msg)
-}
-
-validate_credentials <- function(authorisation_code) {
-  if (nchar(Sys.getenv('strava_app_client_id')) == 0) logerror_stop('strava_app_client_id is blank',logger='authentication')
-  if (nchar(Sys.getenv('strava_app_secret')) == 0) logerror_stop('strava_app_secret is blank',logger='authentication')
-  
-  # loginfo(glue('Using client id: {Sys.getenv(\'strava_app_client_id\')}'),
-  #         logger = 'authentication')
-  # loginfo(glue('Using secret: {Sys.getenv(\'strava_app_secret\')}'),
-  #         logger =
-  #           'authentication')
-  # loginfo(glue('Using auth code: {authorisation_code}'),
-  #         logger = 'authentication')
-}
-
-post_authorisation_code <- function(
-  authorisation_code,
-  strava_app_client_id,
-  strava_app_secret
-) {
-  
-  # post authorisation code
-  response <- POST(url = 'https://www.strava.com/oauth/token',
-                   body = list(
-                     client_id = strava_app_client_id,
-                     client_secret = strava_app_secret,
-                     code = authorisation_code,
-                     scope = "activity:read_all"
-                   )
-  )
-  # returns json/list containing basic athlete information including the access token
-  return(content(response))
 }
 
 #' Tidy activity list into a nested tibble

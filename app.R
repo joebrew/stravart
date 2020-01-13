@@ -78,12 +78,16 @@ uiFunc <- function(req) {
     # tags$script(HTML(redirect))
   } else {
     # Manually create a token
+    message('getting token...')
     token <- oauth2.0_token(
       endpoint = api,
       app = app,
       credentials = oauth2.0_access_token(api, app, parseQueryString(req$QUERY_STRING)$code, user_params=params),
       cache = TRUE
     )
+    message('saving token...')
+    save(token, file = 'token.RData')
+    message('done with token retrieval')
     return(ui)
   }
 }
@@ -139,18 +143,14 @@ server <- function(input, output, session) {
   })
   
   # See whether there is an authorisation code
-  params <- parseQueryString(isolate(session$clientData$url_search))
-  if (!has_auth_code(params)) {
+  paramss <- parseQueryString(isolate(session$clientData$url_search))
+  if (!has_auth_code(paramss)) {
     return()
+  } else {
+    message('paramss is')
+    load('token.RData')
   }
-  # Manually create a token
-  token <- oauth2.0_token(
-    app = app,
-    endpoint = api,
-    credentials = oauth2.0_access_token(api, app, params$code),
-    cache = FALSE
-  )
-  
+
   # Reactive values for holding data
   session_data <- reactiveValues()
   session_data$token <- token
@@ -307,6 +307,8 @@ server <- function(input, output, session) {
   onSessionEnded(function() {
     message('---Disconnecting from database')
     dbDisconnect(con)
+    message('---Deleting token')
+    file.remove('token.RData')
     
     #   ## TO DO: GET STREAMS UPON SESSION END
     #   message('Fetching streams')
@@ -348,6 +350,9 @@ server <- function(input, output, session) {
 onStop(function() {
   message('---Disconnecting from database')
   dbDisconnect(con)
+  message('---Deleting token')
+  file.remove('token.RData')
+  
 })
 
 shinyApp(uiFunc, server)
