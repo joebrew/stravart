@@ -22,6 +22,188 @@ creds_list$drv <- DBI::dbDriver("PostgreSQL")
 con = do.call(DBI::dbConnect, creds_list)
 
 
+session_data <- list()
+id <- 2459272
+# 1 20562211 Joe Brew              
+# 2 21309810 Martí Gutiérrez MAASAI
+# 3 21471474 Bruna Tribó MAASAI    
+# 4 27702571 Xing Brew             
+# 5 2958750  Sergi Vilà            
+# 6 3455964  Marc Bala             
+# 7 49515499 Joe2 Brew2            
+# 8 6000291  Anna Carlson          
+# 9 7420942  Emily Hunkler 
+# stoken <- token <- readRDS('../cache/20562211/token.rds') # joe
+stoken <- token <- readRDS(paste0('../cache/', id, '/token.rds')) # sergi vila
+
+ids_already_in_db <- 
+  dbGetQuery(conn = con,
+             statement = paste0('select id from activities where activities."athlete.id" = ',
+                                "'",
+                                id,
+                                "'")) %>% .$id
+athlete_ids_already_in_db <- 
+  dbGetQuery(conn = con,
+             statement = paste0('select id from athletes')) %>% .$id
+activities_column_names <- 
+  names(dbGetQuery(conn = con,
+                   statement = paste0('select * from activities limit 1'))[0,])
+# Get fewer activities if the id is already in the db
+# (this is just for the sake of speed, and should be improved at some point so as to ensure we're not over/under-fetching)
+if(id %in% athlete_ids_already_in_db){
+  already <- TRUE
+  message('Athlete already in DB. Just fetching some data')
+  my_acts <- get_activity_list_by_page(token,30,1)
+} else {
+  already <- FALSE
+  message('New athlete. Fetching lots of data')
+  my_acts <- get_activity_list_by_page(token,200,100)
+}
+
+# Retrieve the full activities for this athlete from the table
+activities_in_db <- 
+  dbGetQuery(conn = con,
+             statement = paste0('select * from activities where activities."athlete.id" = ',
+                                "'",
+                                id,
+                                "'"))
+
+starting_locations <- dbReadTable(conn = con, 
+                                  name = 'starting_locations')
+activities <- activities_in_db
+# athlete <- my_athlete
+
+# Activities during a certain time period
+feb <- activities %>%
+  filter(type %in% c('Run', 'Ride', 'Bike', 'Hike')) %>%
+  filter(year(start_date_local) == 2020)
+g = make_tiny_maps(activities = feb, labels = T)
+g
+ggsave('~/Desktop/g.png', g, height = 10, width = 9)
+
+# Get activity stream
+index <- which(as.Date(activities$start_date_local) == '2020-09-06')
+
+stream <- get_activity_streams(my_acts[index], stoken = stoken)
+save(stream, file = 'marti_stream.RData')
+
+g2 <- make_location_maps(activities = feb,
+                   starting_locations = starting_locations %>%
+                     mutate(city = ifelse(city == 'les Piles', 'Santa Coloma de Queralt', city))) +
+  facet_wrap(~city, nrow = 3, scales = 'free') +
+  geom_path(lwd = 1)
+ggsave('~/Desktop/2.png', g2, height = 7, width = 3)
+
+
+
+
+# Make pandemic map
+require(googlePolylines)
+
+data <- activities %>%
+  filter(type %in% c('Run', 'Ride', 'Bike', 'Hike')) %>%
+  filter(year(start_date_local) == 2020) %>%
+  filter(!is.na(start_latlng1)) %>%
+  decode_df
+
+# Get some summary info
+summary <- data %>%
+  get_avg_location() %>%
+  left_join(activities %>% dplyr::select(distance, id, start_date_local),
+            by = 'id') %>%
+  mutate(date = as.Date(substr(start_date_local, 1, 10), format = '%Y-%m-%d')) %>%
+  arrange(date, desc(distance)) %>%
+  dplyr::distinct(date, .keep_all = TRUE) %>%
+  # Make date columns
+  mutate(date_month = format(date, '%b'),
+         date_number = as.numeric(format(date, '%d')))
+
+
+
+# Decide if tracks will all be scaled to similar size ("free") or if
+# track sizes reflect absolute distance in each dimension ("fixed")
+scales = 'free'
+if (scales == "fixed") {
+  data <- data %>% dplyr::group_by(id) %>% # for each track,
+    dplyr::mutate(lon = lon - mean(lon), # centre data on zero so facets can
+                  lat = lat - mean(lat)) # be plotted on same distance scale
+} else {
+  scales = "free" # default, in case a non-valid option was specified
+}
+
+# Join summary and data
+data <- data %>% left_join(summary %>% dplyr::select(-lon, -lat))
+
+data$date_month <- factor(data$date_month,
+                          levels = c('Jan', 'Feb', 'Mar', 'Apr', 'May','Jun','Jul','Aug', 
+                                     'Sep', 'Oct', 'Nov', 'Dec'))
+data <- data %>% filter(!is.na(date_month),
+                        !is.na(date_number))
+data$color_group <- c('black')
+
+# Left join to date seq
+date_seq <- seq(min(data$date),
+                max(data$date),
+                1)
+left <- tibble(date = date_seq)
+for(i in 1:nrow(left)){
+  if(!left$date[i] %in% data$date){
+    
+    new_data <- tibble(date = left$date[i],
+                       id = i,
+                       lon = 0,
+                       lat = 0,
+                       color_group = 'white')
+    
+    data <- 
+      data %>% 
+      bind_rows(new_data)
+  }
+}
+
+# Create plot
+p <- ggplot2::ggplot() +
+  ggplot2::geom_path(ggplot2::aes(lon, lat, 
+                                  color = color_group,
+                                  group = id), data, size = 0.55, lineend = "round",
+                     col = 'black') +
+  ggplot2::facet_wrap(~date, scales = scales) +
+  ggplot2::theme_void() +
+  # ggthemes::theme_map() +
+  # labs(x = '', y = '') +
+  ggplot2::theme(#panel.spacing = ggplot2::unit(0, "lines"),
+                 strip.background = ggplot2::element_blank(),
+                 # axis.text.x = element_blank(), axis.text.y = element_blank()
+                 # strip.text = ggplot2::element_blank(),
+                 # plot.margin = ggplot2::unit(rep(1, 4), "cm")
+                 ) +
+  scale_color_manual(name = '', values = c('red', 'black')) +
+  theme(legend.position = 'none')
+
+if (scales == "fixed") {
+  p <- p + ggplot2::coord_fixed() # make aspect ratio == 1
+}
+
+# Add labels
+if(labels) {
+  p <- p +
+    ggplot2::geom_text(ggplot2::aes(lon, lat, label = distance), data = summary,
+                       alpha = 0.25, size = 3)
+}
+
+# Return plot
+p <- p +
+  # theme_black() +
+  theme_nothing() +
+  labs(x = '',
+       y = '')
+
+
+
+
+
+
+
 # Load activities
 # streams <- dbReadTable(conn = con, name = 'streams')
 activities <- dbReadTable(conn = con,name = 'activities')
@@ -88,15 +270,101 @@ joe_activities = activities %>% filter(athlete.id == watt$id[watt$name == 'Joe B
   mutate(starting_location = generate_starting_location_id(.))
 joe_activities <- joe_activities %>% filter(!is.na(starting_location))
 
-joe_activities <- left_join(joe_activities,
-                            starting_locations,
-                            by = c('starting_location' = 'starting_location_id'))
+# joe_activities <- left_join(joe_activities,
+#                             starting_locations,
+#                             by = c('starting_location' = 'starting_location_id'))
+
+# Get just feb 2020
+pd <- joe_activities %>%
+  filter(start_date_local >= '2020-02-01',
+         start_date_local <= '2020-02-29') %>%
+  filter(type == 'Run')
+make_location_maps(activities = pd, starting_locations = starting_locations)
+pdd <- decode_df(pd) 
+
+# Get distance from previous point
+# library(geosphere)
+# pdd <- pdd %>%
+#   group_by(id) %>%
+#   mutate(distance = distm(x = c(lon, lat),
+#                           y = c(dplyr::lead(lon, 1),
+#                                 dplyr::lead(lat, 1)),
+#                           fun = distGeo))
+
+
+pdd$distance <- NA
+for(i in 2:nrow(pdd)){
+  # message(i)
+  this_distance <- distm(c(lon1 = pdd$lon[i],
+                           lat1 = pdd$lat[i]), 
+                         c(lon2 = pdd$lon[i-1], 
+                           lat2 = pdd$lat[i-1]), 
+                         fun = distHaversine)
+  pdd$distance[i] <- this_distance
+}
+
+remove_indices <- which(pdd$distance > 50)
+remove_indices <- c(remove_indices, remove_indices +1, remove_indices -1)
+# Remote striaght line obs
+pdd <- pdd[!(1:nrow(pdd)) %in% remove_indices,]
+pdd$distance <- NULL
+# # Remove start finish
+# acts <- unique(pdd$id)
+# out_list <- list()
+# for(i in 1:length(acts)){
+#   message(i)
+#   this_act <- acts[i]
+#   sub_data <- pdd %>% filter(id == this_act)
+#   if(nrow(sub_data) > 200){
+#     sub_data <- sub_data[101:(nrow(sub_data)-101),]
+#   }
+#   
+#   out_list[[i]] <- sub_data
+# }
+# pdd <- bind_rows(out_list)
+# # Remove start / finish
+# pdd <- pdd %>%
+#   group_by(id) %>%
+#   mutate(remove = (lon == dplyr::first(lon) & lat == dplyr::first(lat)) |
+#            (lat == dplyr::last(lat) & lat == dplyr::last(lat)))
+# pdd <- pdd %>% filter(!remove)
+pdd$nid <- 1:nrow(pdd)
+pdd <- left_join(pdd, pd)
+pdd <- pdd %>% arrange(nid)
+
+ggplot(data = pdd,
+       aes(x = lon,
+           y = lat,
+           group = id)) +
+  # geom_point(size = 0.1)+
+  geom_path() +
+  facet_wrap(~city, scales = 'free') +
+  ggthemes::theme_map() +
+  databrew::theme_simple()
+
+acts <- unique(pdd$id)
+for(i in 1:length(acts)){
+  this_act <- acts[i]
+  sub_data <- pdd %>% filter(id == this_act)
+  g <- ggplot(data = sub_data,
+         aes(x = lon,
+             y = lat,
+             group = id)) +
+    geom_path()+
+    facet_wrap(~city, scales = 'free') +
+    labs(title = i,
+         subtitle = this_act)
+  print(g)
+}
+
 
 # Join activities to the starting locations
 activities <- left_join(x = activities,
                         y = starting_locations,
                         by = c('start_latlng2' = 'start_longitude',
                                'start_latlng1' = 'start_latitude'))
+
+
 
 
 out <- list()

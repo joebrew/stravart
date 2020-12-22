@@ -478,7 +478,7 @@ get_streams <- function(token, activities){
   streams_list <- list()
 
   counter <- 0
-  for(i in 1:nrow(activities)){
+  for(i in 792:nrow(activities)){
     # rStrava::ratelimit()
     ul <- usage_left
     

@@ -25,6 +25,8 @@ if(interactive()){
   running_locally <- FALSE
 }
 
+app_url <- creds$url_remote
+
 # Define oauth2 flow locations, scope, and params
 app <- oauth_app(appname = 'GPSArt', 
                  key = creds$client_id, 
@@ -55,26 +57,27 @@ ui <- fluidPage(theme = shinytheme('united'),
            "
                     )
                   )),
-                sidebarLayout(
-                  sidebarPanel(h2('Side stuff')),
+                # sidebarLayout(
+                #   sidebarPanel(h2('Side stuff')),
                   mainPanel(
                     tabsetPanel(type = "tabs",
-                                tabPanel("Plot", 
-                                         fluidPage(
-                                           
-                                           leafletOutput("leaf")
-                                           
-                                           
-                                         )),
-                                tabPanel("Slow", 
+                                # tabPanel("Plot", 
+                                #          fluidPage(
+                                #            
+                                #            leafletOutput("leaf")
+                                #            
+                                #            
+                                #          )),
+                                tabPanel("Chart", 
                                          fluidPage(
                                            fluidRow(column(12, align = 'center', h3(textOutput('development_text')))),
                                            mobileDetect('isMobile'),
                                            textOutput('isItMobile'),
+                                           fluidRow(column(12,align = 'center',
+                                                           plotOutput('plot1'))),
                                            fluidRow(column(6,align = 'center',
-                                                           plotOutput('plot1')),
-                                                    column(6,align = 'center',
-                                                           plotOutput('plot2')))))))))
+                                                           plotOutput('plot2'))))))))
+                # )
 
 
 uiFunc <- function(req) {
@@ -183,7 +186,7 @@ server <- function(input, output, session) {
     # Save lastname too
     file.create(paste0(cache_dir, '/', my_athlete$firstname, ' ', my_athlete$lastname), showWarnings = FALSE)
     
-    shiny::setProgress(value=0.2,message = 'Connecting to Strava to retrieve your data.')
+    shiny::setProgress(value=0.2,message = 'Connecting to Strava to retrieve your data. Be patient. This will take a long time.')
     
     # Fetch activities, but first see if that athlete already has some activities in the database
     # (fetch fewer if the athlete already has some)
@@ -201,7 +204,7 @@ server <- function(input, output, session) {
                        statement = paste0('select * from activities limit 1'))[0,])
     # Get fewer activities if the id is already in the db
     # (this is just for the sake of speed, and should be improved at some point so as to ensure we're not over/under-fetching)
-    shiny::setProgress(value=0.25,message = 'Be patient: Downloading activity data')
+    shiny::setProgress(value=0.25,message = 'Keep being patient: Downloading activity data')
     if(id %in% athlete_ids_already_in_db){
       already <- TRUE
       message('Athlete already in DB. Just fetching some data')
@@ -291,7 +294,7 @@ server <- function(input, output, session) {
   output$development_text <- renderText({
     sda <- session_data$athlete
     fn <- sda$firstname
-    paste0('Hi ', fn, '. This app is still under development. Come back soon!')
+    paste0('Hi ', fn, '. This app is still under development. But Joe now has your data. Thanks. Come back soon!')
   })
   
   output$plot1 <- renderPlot({
