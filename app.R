@@ -25,7 +25,7 @@ if(interactive()){
   running_locally <- FALSE
 }
 
-app_url <- creds$url_remote
+# app_url <- creds$url_remote
 
 # Define oauth2 flow locations, scope, and params
 app <- oauth_app(appname = 'GPSArt', 
