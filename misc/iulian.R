@@ -15,30 +15,26 @@ source('../plot_functions.R', chdir = T)
 
 # Connect to the db
 # Get creds
-creds <- yaml.load_file('../credentials.yaml')
-creds_list <- credentials_extract( credentials_path = '.')
+creds_list <- creds <- yaml.load_file('../credentials.yaml')
+# creds_list <- credentials_extract( credentials_path = '.')
 creds_list <- creds_list[names(creds_list) %in% c('dbname', 'host', 'port', 'user', 'password')]
 creds_list$drv <- DBI::dbDriver("PostgreSQL")
 con = do.call(DBI::dbConnect, creds_list)
 
-# See who is who
-where_are_the_tokens()
 
 session_data <- list()
-id <- 2459272
-  # 1 20562211 Joe Brew              
+id <- 2459272 # iulian
+# 1 20562211 Joe Brew              
 # 2 21309810 Martí Gutiérrez MAASAI
 # 3 21471474 Bruna Tribó MAASAI    
-# 4 2459272  Iulian Circo          
 # 4 27702571 Xing Brew             
 # 5 2958750  Sergi Vilà            
 # 6 3455964  Marc Bala             
 # 7 49515499 Joe2 Brew2            
-# 8 6000291  Anna Carlson
-# 10 66133984 B A                   
+# 8 6000291  Anna Carlson          
 # 9 7420942  Emily Hunkler 
 # stoken <- token <- readRDS('../cache/20562211/token.rds') # joe
-stoken <- token <- readRDS(paste0('../cache/', id, '/token.rds')) 
+stoken <- token <- readRDS(paste0('../cache/', id, '/token.rds')) # sergi vila
 
 ids_already_in_db <- 
   dbGetQuery(conn = con,
@@ -57,32 +53,13 @@ activities_column_names <-
 if(id %in% athlete_ids_already_in_db){
   already <- TRUE
   message('Athlete already in DB. Just fetching some data')
-  my_acts <- get_activity_list_by_page(token,200,100) # 30, 1
+  my_acts <- get_activity_list_by_page(token,30,1)
 } else {
   already <- FALSE
   message('New athlete. Fetching lots of data')
   my_acts <- get_activity_list_by_page(token,200,100)
 }
 
-
-my_acts.df <- my_acts %>% 
-  tidy_activities()
-# Remove those that are already in the database
-new_acts <- my_acts.df %>%
-  filter(!id %in% ids_already_in_db)
-# Add new_acts to db if there are any
-if(nrow(new_acts) > 0){
-  # Remove excess columns
-  new_acts <- data.frame(new_acts)
-  new_acts <- new_acts[,names(new_acts) %in%activities_column_names]
-  message('---Writing ', nrow(new_acts), ' new activities to the database for athlete ', id)
-  # Write the new acts to the table
-  dbWriteTable(conn = con,
-               name = 'activities',
-               value = new_acts,
-               append = TRUE,
-               row.names = FALSE)
-}
 # Retrieve the full activities for this athlete from the table
 activities_in_db <- 
   dbGetQuery(conn = con,
@@ -91,358 +68,233 @@ activities_in_db <-
                                 id,
                                 "'"))
 
-# Get starting location ids
-slids <- generate_starting_location_id(activities_in_db)
-slids <- slids[!is.na(slids)]
-slids <- sort(unique(slids))
-# Get already geocoded starting locations
-old_starting_locations <- dbReadTable(conn = con,name = 'starting_locations')
-# Remove those slids which are already geocoded
-slids <- slids[!slids %in% old_starting_locations$starting_location_id]
-if(length(slids) > 0){
-  # Geocode them
-  geocoded_slids <- reverse_geocode(slids = slids)
-  # Add the geocoded slids to the db
-  message('Adding newly geocoded starting locations to the database')
-  dbWriteTable(con, "starting_locations", data.frame(geocoded_slids), append = TRUE, row.names = FALSE)
-}
-
 starting_locations <- dbReadTable(conn = con, 
                                   name = 'starting_locations')
-
 activities <- activities_in_db
 # athlete <- my_athlete
 
-# Get activities jut for 2020
-df <- activities %>%
-  mutate(year = year(start_date_local)) %>%
-  filter(year(start_date_local) == 2020) %>%
-  mutate(day_number = as.numeric(format(as.POSIXct(start_date_local), '%d'))) %>%
-  mutate(type = ifelse(type == 'EBikeRide', 'Bike', type)) %>%
-  mutate(type = ifelse(grepl('Ski', type), 'Ski', type))
+# # Get all streams
+my_acts_compiled <- compile_activities(my_acts)
+# the_streams <- get_streams(token = stoken,
+#                            activities = my_acts_compiled)
+# save(the_streams, file = 'the_streams.RData')
+load('the_streams.RData')
 
-# Make one map for each activitiy
-scales = 'free'
-labels = FALSE
-
-require(googlePolylines)
-
-
-data <- df %>%
-  filter(!is.na(start_latlng1)) %>%
-  decode_df
-data <- left_join(data, df %>% dplyr::select(id, type))
-
-# Get some summary info
-summary <- data %>%
-  get_avg_location() %>%
-  left_join(activities %>% dplyr::select(distance, id),
-            by = 'id')
-summary <- left_join(summary, df %>% dplyr::select(id, type))
-
-# Decide if tracks will all be scaled to similar size ("free") or if
-# track sizes reflect absolute distance in each dimension ("fixed")
-if (scales == "fixed") {
-  data <- data %>% dplyr::group_by(id) %>% # for each track,
-    dplyr::mutate(lon = lon - mean(lon), # centre data on zero so facets can
-                  lat = lat - mean(lat)) # be plotted on same distance scale
-} else {
-  scales = "free" # default, in case a non-valid option was specified
-}
-
-cols <- c( 'darkgreen' , 'black', 'darkred', 'darkblue', 'purple', 'darkgrey')
-# Create plot
-p <- ggplot2::ggplot() +
-  ggplot2::geom_path(ggplot2::aes(lon, lat, 
-                                  color = type,
-                                  group = id), data, size = 0.55, lineend = "round",
-                     # col = 'black', 
-                     alpha = 0.87) +
-  ggplot2::facet_wrap(~id, scales = scales) +
-  ggplot2::theme_void() +
-  scale_color_manual(name = '', values = cols[1:length(unique(data$type))]) +
+# By place
+pd <- the_streams %>% left_join(my_acts_compiled %>% dplyr::select(id,
+                                                                   start_latitude,
+                                                                   start_longitude,
+                                                                   type)) %>%
+  mutate(start_latitude = round(start_latitude, digits = 2),
+         start_longitude = round(start_longitude, digits = 2)) %>%
+  left_join(starting_locations) %>%
+group_by(id) %>%
+  mutate(x = distance / max(distance),
+         y_altitude = altitude - min(altitude),
+         y_heartrate = heartrate / min(heartrate),
+         lat_mean = mean(lat, na.rm = TRUE),
+         lng_mean = mean(lng, na.rm = TRUE)) %>%
+  ungroup %>%
+  mutate(lat_rel = lat - lat_mean,
+         lng_rel = lng - lng_mean)
+# identify most common places
+x = pd %>% group_by(starting_location_id) %>%
+  tally %>% ungroup %>% arrange(desc(n))
+# Get name
+x = x %>% left_join(starting_locations %>% dplyr::select(starting_location_id, city))
+x <- x %>% filter(!city %in% "City Not Found")
+x = x[1:7,]
+pd <- pd[pd$starting_location_id %in% x$starting_location_id,]# %>% dplyr::filter(starting_location_id %in% x$starting_location_id)
+pd$city <- unlist(lapply(strsplit(pd$city, ','), function(x){x[1]}))
+ggplot(data = pd,
+       aes(x = lng_rel,
+           y = lat_rel,
+           group = id,
+           color = city)) +
+  geom_path(alpha = 0.7, size = 0.4) +
+  # geom_line() +
+  facet_wrap(~city, scales = 'free') +
+  theme_void() +
   ggplot2::theme(panel.spacing = ggplot2::unit(0, "lines"),
                  strip.background = ggplot2::element_blank(),
-                 strip.text = ggplot2::element_blank(),
                  plot.margin = ggplot2::unit(rep(1, 4), "cm")) +
-  theme(legend.position = 'bottom')
-
-if (scales == "fixed") {
-  p <- p + ggplot2::coord_fixed() # make aspect ratio == 1
-}
-
-# Add labels
-if(labels) {
-  p <- p +
-    ggplot2::geom_text(ggplot2::aes(lon, lat, label = distance), data = summary,
-                       alpha = 0.25, size = 3)
-}
-
-# Return plot
-out <- p +
-  # theme_black() +
-  # theme_nothing() +
-  labs(x = '',
-       y = '') +
-  # theme(#legend.justification = c(0, 0),
-  #       legend.position = c(1, 0.5)) +
-  labs(title = '2020') +
-  theme(plot.title = element_text(size = 16, hjust = 0.5, vjust = 1)) +
-  theme(legend.position = 'bottom') +
-  guides(fill=guide_legend(nrow=1,byrow=TRUE))
-  # theme(legend.position = 'bottomright')
-  # theme(legend.position = 'bottomright',
-  #       legend.text = element_text(size = 3))
-ggsave(out, filename = '~/Desktop/p.png')
-
-######################################
-# Make map of just SCQ
-right <- activities %>%
-  mutate(starting_location_id = generate_starting_location_id(.)) %>%
-  left_join(starting_locations,
-            by = 'starting_location_id') %>%
-  dplyr::select(city, country, id, type)
-left <- activities %>%
-  filter(!is.na(start_latlng1)) %>%
-  decode_df
-pd <- left_join(left, right, by = 'id') %>%
-  mutate(type = ifelse(type %in% c('EBikeRide', 'Ride'), 'Bike', type)) %>%
-  filter(!type %in% ('Workout'))
-
-# Remove city not found
-pd <- pd %>%
-  filter(!city %in% c('City Not Found'),
-         !is.na(city))
-pd <- pd %>% mutate(city = gsub(' Local Municipality','', city))
-pd <- pd %>% filter(!grepl('not found', tolower(city)))
-
-# pd <- pd %>%
-#   mutate(city = ifelse(city %in% c('Sant Martí de Tous', 'Bellprat', 'Contrast', 'Igualada', 'les Piles', 'Llorac',
-#                                    'Pontils', 'Vallfogona de Riucorb', 'Vilanova del Camí'),
-#                        'Santa Coloma de Queralt',
-#                        city))
-# # Remove everything except SCQ
-# pd <- pd %>% filter(city == 'Santa Coloma de Queralt')
-
-# n_cols <- length(unique(pd$city))
-# cols <- colorRampPalette(RColorBrewer::brewer.pal(n = 9, name = 'Spectral'))(n_cols)
-# cols <- sample(cols, size = n_cols)
-bg <- 'black'
-text_col <- ifelse(bg == 'white', 'black', 'white')
-cols <- colorRampPalette(RColorBrewer::brewer.pal(n = 8, name = 'Dark2'))(length(unique(pd$city)))
-p <- ggplot(data = pd,
-       aes(x = lon,
-           y = lat,
-           group = id)) +
-  geom_path(alpha = 0.7,
-    size = 0.25,
-    aes(color = type),
-    # color = 'red',
-    # aes(color = city), 
-    lineend = "round") +
-  # scale_color_manual(name = '',
-  #                    values = c('darkred',
-  #                               'blue')) +
-  facet_wrap(~city,
-             scales = 'free') +
+  scale_color_manual(name = '',
+                     values = RColorBrewer::brewer.pal(n = length(unique(pd$city)), 'Spectral')) +
+  theme_void() +
+  theme_black()  +
   theme_nothing() +
-  # scale_color_manual(name = '', values = cols) +
-  # theme(legend.position = 'none') +
-  theme(strip.text = element_text(size = 5, color = text_col)) +
+  theme(legend.position = 'none') +
+  theme(panel.background = element_rect(fill = 'black'),
+        panel.grid.major = element_blank(),
+        strip.text = ggplot2::element_text(color = 'white'),
+        panel.grid.minor = element_blank()) +
   theme(
   # Specify panel options
   panel.spacing = ggplot2::unit(0, "lines"),
-  strip.background = ggplot2::element_blank(), #strip.text = ggplot2::element_blank(),
+  strip.background = ggplot2::element_blank(), strip.text = ggplot2::element_blank(),
   plot.margin = ggplot2::unit(rep(1, 4), "cm"),
-  panel.background = element_rect(fill = bg, color  =  NA),
-  panel.border = element_rect(fill = NA, color = bg),
-  plot.background = element_rect(color = bg, fill = bg)
+  panel.background = element_rect(fill = "black", color  =  NA),
+  panel.border = element_rect(fill = NA, color = "black"),
+  plot.background = element_rect(color = "black", fill = "black")
 ) +
   theme(panel.grid.minor=element_blank(),
         panel.grid.major=element_blank(),
         panel.background=element_blank()) +
-  theme(plot.background=element_rect(fill=bg),
-        panel.background=element_rect(fill=bg),
-        legend.background= element_rect(fill=bg, colour=NA),
-        # legend.key = element_rect(colour = NA, col = "white",
-        #                           size = .5, fill = 'black'),
-        legend.text = element_text(colour = text_col),
-        legend.position = c(0.8, 0)) +
-  # coord_map() +
-  scale_color_manual(name = '',
-                     values = cols) +
+  theme(plot.background=element_rect(fill="black"),
+        panel.background=element_rect(fill='black'),
+        legend.background= element_rect(fill="black", colour=NA),
+        legend.key = element_rect(colour = NA, col = "black",
+                                  size = .5, fill = 'black')) +
+theme(axis.line = element_blank(), 
+      axis.text = element_blank(), 
+      axis.ticks = element_blank(), 
+      # axis.title = element_blank(), 
+      panel.border = element_blank(), 
+      panel.spacing = unit(0, 
+                           "lines"), 
+      legend.justification = c(0, 0), 
+      legend.position = c(0, 
+                          0)) +
+  theme(axis.text.x=element_blank(),axis.ticks.x=element_blank(),
+        plot.margin=unit(c(0,0,0,0), "lines")) +
+  theme(strip.text = ggplot2::element_text(color = 'white', size = 4.5)) +
   theme(legend.position = 'none')
-ggsave(p, filename = '~/Desktop/px.png', height = 16, width =22)
-  
-# Try to get elevation by stream
-start_dates <- unlist(lapply(my_acts, function(x){return(x$start_date)}))
-sub_acts <- my_acts#[year(start_dates) == 2020]
-stream_list <- list()
-counter <- 0
-for(i in 1:length(sub_acts)){
-  message(i, ' of ', length(sub_acts))
-  this_act <- sub_acts[i]
-  ok <- !is.null(this_act[[1]]$start_latlng)
-  if(ok){
-    stream <- get_activity_streams(this_act, stoken = stoken)
-    if(nrow(stream) > 0){
-      counter <- counter +1
-      stream_list[[counter]] <- stream
-    }
-  }
-}
-pd <- bind_rows(stream_list)
-save(pd, file = 'iulian_streams.RData')
-#########################################
-# Top 4 locations
-# load('bernat_streams2020.RData')
-# load('the_streams.RData')
-# pd <- the_streams
-pd <- pd %>% filter(id %in% activities$id) 
-right <- activities %>%
-  mutate(starting_location_id = generate_starting_location_id(.)) %>%
-  left_join(starting_locations,
-            by = 'starting_location_id') %>%
-  dplyr::select(city, country, id, type)
+# dir.create('plots')
+ggsave('plots/panelmap.png', width = 8, height = 6.5)
 
-pdx <- left_join(pd, 
-                 right, by = 'id') %>%
-  mutate(type = ifelse(type %in% c('EBikeRide', 'Ride'), 'Bike', type)) %>%
-  filter(!type %in% ('Workout')) %>%
-  mutate(type = ifelse(type == 'StandUpPaddling',
-                       'Stand up paddle',
-                       type))
-top4 <- pdx %>%
-  group_by(country, city) %>%
-  tally %>%
+
+pd <- the_streams %>%
+  group_by(id) %>%
+  mutate(x = distance / max(distance),
+         y_altitude = altitude - min(altitude),
+         y_heartrate = heartrate / min(heartrate),
+         lat_mean = mean(lat, na.rm = TRUE),
+         lng_mean = mean(lng, na.rm = TRUE)) %>%
   ungroup %>%
-  arrange(desc(n)) %>% head(1) 
-keep <- pdx %>%
-  left_join(top4) %>%
-  filter(!is.na(n)) %>%
-  mutate(city = ifelse(grepl('not found', tolower(city)),
-                       'Wien',
-                       city))
+  mutate(lat_rel = lat - lat_mean,
+         lng_rel = lng - lng_mean)
+ids <- sample(unique(the_streams$id), 100)
+ggplot(data = pd %>% filter(id %in% ids),
+       aes(x = lng_rel,
+           y = lat_rel,
+           group = id)) +
+  geom_path() +
+  # geom_line() +
+  facet_wrap(~id) +
+  theme_void() +
+  ggplot2::theme(panel.spacing = ggplot2::unit(0, "lines"),
+                 strip.background = ggplot2::element_blank(),
+                 strip.text = ggplot2::element_blank(),
+                 plot.margin = ggplot2::unit(rep(1, 4), "cm"))
+# dir.create('plots')
+ggsave('plots/maps.png')
 
-bg <- 'white'
-text_col <- ifelse(bg == 'white', 'black', 'white')
-cols <- colorRampPalette(RColorBrewer::brewer.pal(n = 8, name = 'Dark2'))(length(unique(keep$type)))
-cols[5] <- 'red'
-p <- ggplot(data = keep,
-            aes(x = lng,
-                y = lat,
-                group = id)) +
-  geom_path(alpha = 0.5,
-            size = 0.4,
-            aes(color = type),
-            # color = 'red',
-            # aes(color = city), 
-            lineend = "round") +
-  # scale_color_manual(name = '',
-  #                    values = c('darkred',
-  #                               'blue')) +
-  facet_wrap(~city,
-             scales = 'free') +
-  theme_nothing() +
-  # scale_color_manual(name = '', values = cols) +
-  # theme(legend.position = 'none') +
-  theme(strip.text = element_text(size = 14, color = text_col)) +
-  theme(
-    # Specify panel options
-    panel.spacing = ggplot2::unit(0, "lines"),
-    strip.background = ggplot2::element_blank(),# strip.text = ggplot2::element_blank(),
-    plot.margin = ggplot2::unit(rep(1, 4), "cm"),
-    panel.background = element_rect(fill = bg, color  =  NA),
-    panel.border = element_rect(fill = NA, color = bg),
-    plot.background = element_rect(color = bg, fill = bg)
-  ) +
-  theme(panel.grid.minor=element_blank(),
-        panel.grid.major=element_blank(),
-        panel.background=element_blank()) +
-  theme(plot.background=element_rect(fill=bg),
-        panel.background=element_rect(fill=bg),
-        legend.background= element_rect(fill=bg, colour=bg),
-        # legend.key = element_rect(colour = NA, col = "white",
-        #                           size = .5, fill = 'black'),
-        legend.text = element_text(colour = text_col, size = 10)#,
-        # legend.position = c(0.8, 0)
-        ) +
-  # coord_map() +
+ggplot(data = pd,# %>% filter(id %in% ids),
+       aes(x = lng_rel,
+           y = lat_rel,
+           group = id)) +
+  geom_path(size = 0.1) +
+  # geom_line() +
+  facet_wrap(~id, scales = 'free') +
+  theme_void() +
+  ggplot2::theme(panel.spacing = ggplot2::unit(0, "lines"),
+                 strip.background = ggplot2::element_blank(),
+                 strip.text = ggplot2::element_blank(),
+                 plot.margin = ggplot2::unit(rep(1, 4), "cm"))
+# dir.create('plots')
+ggsave('plots/mapsmanynoscale.png')
+
+pd <- pd %>% left_join(my_acts_compiled %>% dplyr::select(id, type))
+ggplot(data = pd,# %>% filter(id %in% ids),
+       aes(x = lng_rel,
+           y = lat_rel,
+           group = id)) +
+  geom_path(size = 0.1,
+            aes(color = factor(type))) +
+  # geom_line() +
+  facet_wrap(~id, scales = 'free') +
+  theme_void() +
+  ggplot2::theme(panel.spacing = ggplot2::unit(0, "lines"),
+                 strip.background = ggplot2::element_blank(),
+                 strip.text = ggplot2::element_blank(),
+                 plot.margin = ggplot2::unit(rep(1, 4), "cm")) +
   scale_color_manual(name = '',
-                     values = cols) +
-  theme(legend.position = 'bottom') +
-  guides(fill=guide_legend(nrow=1,byrow=TRUE))
+                     values = colorRampPalette(RColorBrewer::brewer.pal(n = 8, 'Set3'))(length(unique(pd$type)))
+                       # rainbow(length(unique(pd$type)))
+                       ) +
+  theme(legend.position = 'bottom')
+# dir.create('plots')
+ggsave('plots/mapsmanymany.png')
 
-ggsave(p, filename = '~/Desktop/top4.png', height = 12, width =16)
-
-
-
-
-
-
-pd <- left_join(pd, activities %>% dplyr::select(id, type, date = start_date_local)) %>%
-  mutate(date = as.character(as.Date(date))) %>%
-  mutate(type = ifelse(type == 'EBikeRide', 'Bike', type)) 
-
-gx <- ggplot(data = pd,
-       aes(x = distance,
-           y = altitude)) +
-  geom_line(aes(color = type)) +
-  # geom_area(fill = 'white') +
-  facet_wrap(~date) +
-  theme_nothing() +
-  # scale_color_manual(name = '', values = cols) +
-  # theme(legend.position = 'none') +
-  theme(strip.text = element_text(size = 8)) +
-  theme(
-    # Specify panel options
-    panel.spacing = ggplot2::unit(0, "lines"),
-    strip.background = ggplot2::element_blank(), #strip.text = ggplot2::element_blank(),
-    plot.margin = ggplot2::unit(rep(1, 4), "cm"),
-    strip.text = element_text(size = 3),
-    panel.background = element_rect(fill = "white", color  =  NA),
-    panel.border = element_rect(fill = NA, color = "white"),
-    plot.background = element_rect(color = "white", fill = "white")
-  ) +
-  theme(panel.grid.minor=element_blank(),
-        panel.grid.major=element_blank(),
-        panel.background=element_blank()) +
-  theme(plot.background=element_rect(fill="white"),
-        panel.background=element_rect(fill='white'),
-        legend.background= element_rect(fill="white", colour=NA),
-        # legend.key = element_rect(colour = NA, col = "white",
-        #                           size = .5, fill = 'white'),
-        legend.text = element_text(colour = 'black', size = 4),
-        legend.position = c(0.9, -0.07),
-        axis.text.y = element_text(size = 4),
-        axis.text.x = element_text(size = 4),
-        axis.title.y = element_text(size = 8),
-        plot.title = element_text(hjust = 0.5),
-        axis.title.x = element_text(size = 8)) +
-  scale_y_continuous(breaks = c(0, 1000),
-                     limits = c(0, 1100)) +
-  scale_x_continuous(breaks = c(0, 50)) +
-  labs(title = '2020',
-       x = 'KM',
-       y = 'M') +
+ggplot(data = pd,# %>% filter(id %in% ids),
+       aes(x = lng_rel,
+           y = lat_rel,
+           group = id,
+           color = factor(id))) +
+  geom_path(size = 0.4, alpha = 0.3) +
+  # geom_line() +
+  # facet_wrap(~id, scales = 'free') +
+  theme_void() +
+  ggplot2::theme(panel.spacing = ggplot2::unit(0, "lines"),
+                 strip.background = ggplot2::element_blank(),
+                 strip.text = ggplot2::element_blank(),
+                 plot.margin = ggplot2::unit(rep(1, 4), "cm")) +
   scale_color_manual(name = '',
-                     values = c('darkred', 'black'))
-  # theme(plot.title = element_text(hjust = 0.5, vjust = 1, color = 'white'))
-ggsave(gx, filename =  '~/Desktop/elevation.png', width = 7.5, height = 6)
+                     values = rainbow(length(unique(pd$id)))) +
+  theme(legend.position = 'none')
+# dir.create('plots')
+ggsave('plots/mapsmanyoverlapalpha.png')
 
+
+
+ids <- sample(unique(the_streams$id[!is.na(the_streams$heartrate)]), 100)
+ggplot(data = pd %>% filter(id %in% ids),
+       aes(x = x,
+           y = y_heartrate)) +
+  geom_line(color = 'darkred') +
+  # geom_area(color = 'darkred', alpha = 0.6,
+            # fill = 'red') +
+  # geom_line() +
+  facet_wrap(~id) +
+  theme_void() +
+  ggplot2::theme(panel.spacing = ggplot2::unit(0, "lines"),
+                 strip.background = ggplot2::element_blank(),
+                 strip.text = ggplot2::element_blank(),
+                 plot.margin = ggplot2::unit(rep(1, 4), "cm"))
+# dir.create('plots')
+ggsave('plots/iulian_elevation_facets.png')
 
 ggplot(data = pd,
+       aes(x = x,
+           y = y_altitude)) +
+  geom_area() +
+  facet_wrap(~id) +
+  theme_void() +
+  ggplot2::theme(panel.spacing = ggplot2::unit(0, "lines"),
+                 strip.background = ggplot2::element_blank(),
+                 strip.text = ggplot2::element_blank(),
+                 plot.margin = ggplot2::unit(rep(1, 4), "cm"))
+ggsave('plots/iulian_elevation_facets.png')
+
+index <- which(as.Date(activities$start_date_local) == '2020-09-02')
+
+stream <- get_activity_streams(my_acts[index], stoken = stoken)
+
+# Hyrogliphic rule no 9
+ggplot(data = stream %>% filter(moving),
        aes(x = distance,
-           y = altitude,
-           group = factor(id),
-           color = type)) +
-  geom_line() +
-  theme(legend.position = 'none')
+           y = altitude)) +
+  geom_area(fill = 'brown', alpha = 0.6) +
+  theme_void()
 
 
-g = make_tiny_maps(activities = df, labels = T)
+
+# Activities during a certain time period
+feb <- activities %>%
+  filter(type %in% c('Run', 'Ride', 'Bike', 'Hike')) %>%
+  filter(year(start_date_local) == 2020)
+g = make_tiny_maps(activities = feb, labels = T)
 g
-ggsave('~/Desktop/g.png')
 ggsave('~/Desktop/g.png', g, height = 10, width = 9)
 
 # Get activity stream
@@ -455,7 +307,7 @@ g2 <- make_location_maps(activities = feb,
                    starting_locations = starting_locations %>%
                      mutate(city = ifelse(city == 'les Piles', 'Santa Coloma de Queralt', city))) +
   facet_wrap(~city, nrow = 3, scales = 'free') +
-  geom_path(lwd = 0.2, alpha = 0.4)
+  geom_path(lwd = 1)
 ggsave('~/Desktop/2.png', g2, height = 7, width = 3)
 
 
@@ -569,7 +421,7 @@ p <- p +
 
 
 # Load activities
-# streams <- dbReadTable(conn = con, name = 'streams')
+xstreams <- dbReadTable(conn = con, name = 'streams')
 activities <- dbReadTable(conn = con,name = 'activities')
 starting_locations <- dbReadTable(conn = con,name = 'starting_locations')
 athletes <- dbReadTable(conn = con, name = 'athletes')
